@@ -8,6 +8,11 @@ type PaymentsSidebarProps = {
 };
 
 export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
+  const totalAmount = payments.reduce(
+    (total, payment) => total + payment.amount,
+    0,
+  );
+
   function downloadCsv() {
     const link = document.createElement("a");
 
@@ -20,10 +25,24 @@ export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
 
   return (
     <aside className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:sticky md:top-6 md:self-start">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-stretch">
-        <h2 className="text-lg font-semibold">Paiements renseignés</h2>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Paiements</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            {payments.length} paiement{payments.length > 1 ? "s" : ""}{" "}
+            enregistré{payments.length > 1 ? "s" : ""}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-zinc-950 p-4 text-white">
+          <p className="text-sm text-zinc-300">Total encaissé</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {formatCurrency(totalAmount)}
+          </p>
+        </div>
+
         <button
-          className="h-10 rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+          className="h-11 rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
           onClick={downloadCsv}
           type="button"
         >
@@ -32,14 +51,14 @@ export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
       </div>
 
       {payments.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-600">
+        <p className="mt-5 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
           Aucun paiement renseigné pour le moment.
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
+        <ul className="mt-5 flex flex-col gap-3">
           {payments.map((payment) => (
             <li
-              className="rounded-lg border border-zinc-100 bg-zinc-50 p-3"
+              className="rounded-lg border border-zinc-100 bg-zinc-50 p-4"
               key={payment.appointmentUid}
             >
               <p className="font-medium">{payment.title}</p>
@@ -52,6 +71,9 @@ export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
                 </span>{" "}
                 par {payment.method}
               </p>
+              {payment.service ? (
+                <p className="mt-1 text-sm text-zinc-600">{payment.service}</p>
+              ) : null}
             </li>
           ))}
         </ul>

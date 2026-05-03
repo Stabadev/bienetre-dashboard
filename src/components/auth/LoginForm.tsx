@@ -49,12 +49,12 @@ export function LoginForm() {
   }
 
   return (
-    <form className="mt-6 flex flex-col gap-4" onSubmit={submitLogin}>
+    <form className="mt-7 flex flex-col gap-5" onSubmit={submitLogin}>
       <label className="flex flex-col gap-2 text-sm font-medium">
         Nom de compte
         <input
           autoComplete="username"
-          className="h-11 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+          className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
           name="username"
           required
           type="text"
@@ -65,7 +65,7 @@ export function LoginForm() {
         Mot de passe
         <input
           autoComplete="current-password"
-          className="h-11 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+          className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
           name="password"
           required
           type="password"
@@ -73,13 +73,13 @@ export function LoginForm() {
       </label>
 
       {errorMessage ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
           {errorMessage}
         </p>
       ) : null}
 
       <button
-        className="h-11 rounded-lg bg-zinc-950 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+        className="h-12 rounded-xl bg-amber-600 px-4 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
         disabled={isSubmitting}
         type="submit"
       >

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthResponse } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-const paymentMethods = new Set(["espèces", "chèque", "virement", "carte"]);
+const paymentMethods = new Set(["espèces", "chèque", "virement"]);
 
 type PaymentPayload = {
   appointmentUid?: unknown;

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { CalendarError, getCalendarEvents } from "@/lib/calendar";
@@ -42,15 +43,30 @@ async function loadEvents(): Promise<
 
 function Dashboard({ events }: { events: CalendarEvent[] }) {
   return (
-    <main className="min-h-screen bg-zinc-50 px-6 py-10 text-zinc-950">
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+    <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold">Tableau de bord</h1>
-              <p className="mt-2 text-zinc-600">Rendez-vous Google Calendar</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                Administration
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+                Tableau de bord
+              </h1>
+              <p className="mt-2 text-zinc-600">
+                Rendez-vous importés depuis Google Calendar
+              </p>
             </div>
-            <LogoutButton />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Link
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white/90 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-white"
+                href="/"
+              >
+                Retour accueil
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
         </header>
 

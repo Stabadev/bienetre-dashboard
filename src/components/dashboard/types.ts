@@ -1,4 +1,4 @@
-export type PaymentMethod = "espèces" | "chèque" | "virement" | "carte";
+export type PaymentMethod = "espèces" | "chèque" | "virement";
 
 export type Service = "Première séance" | "Séance d’entretien";
 
@@ -11,7 +11,7 @@ export type SavedPayment = {
   startAt: string;
   endAt: string;
   amount: number;
-  method: PaymentMethod;
+  method: string;
   paidAt: string;
   createdAt: string;
   updatedAt: string;

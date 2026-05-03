@@ -18,7 +18,7 @@ export function LogoutButton() {
 
   return (
     <button
-      className="h-10 rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:bg-white disabled:cursor-not-allowed disabled:text-zinc-400"
+      className="h-11 rounded-xl border border-zinc-200 bg-white/90 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-white disabled:cursor-not-allowed disabled:text-zinc-400"
       disabled={isLoggingOut}
       onClick={logout}
       type="button"

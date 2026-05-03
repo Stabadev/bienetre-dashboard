@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
-import { formatDate, formatTime } from "./formatters";
+import { formatCurrency, formatDate, formatTime } from "./formatters";
 import type {
   PaymentDraft,
   PaymentMethod,
@@ -10,12 +10,7 @@ import type {
   Service,
 } from "./types";
 
-const paymentMethods: PaymentMethod[] = [
-  "espèces",
-  "chèque",
-  "virement",
-  "carte",
-];
+const paymentMethods: PaymentMethod[] = ["espèces", "chèque", "virement"];
 
 const services: Array<{
   label: Service;
@@ -51,6 +46,14 @@ function getServicePrice(serviceLabel: Service): number {
   );
 }
 
+function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod {
+  return (
+    paymentMethods.find(
+      (paymentMethod) => paymentMethod === existingPayment?.method,
+    ) ?? "espèces"
+  );
+}
+
 type PaymentModalProps = {
   event: CalendarEvent;
   existingPayment?: SavedPayment;
@@ -78,7 +81,7 @@ export function PaymentModal({
       getServicePrice(initialService).toString(),
   );
   const [method, setMethod] = useState<PaymentMethod>(
-    existingPayment?.method ?? "espèces",
+    getInitialPaymentMethod(existingPayment),
   );
   const [service, setService] = useState<Service>(initialService);
 
@@ -94,19 +97,23 @@ export function PaymentModal({
   return (
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-2 backdrop-blur-sm sm:p-6"
       role="dialog"
     >
-      <div className="flex max-h-[calc(100vh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-xl sm:max-h-[calc(100vh-48px)]">
-        <div className="border-b border-zinc-200 px-5 py-4">
+      <div className="flex max-h-[calc(100vh-16px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100vh-48px)]">
+        <div className="border-b border-amber-100 bg-amber-50/70 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold">Renseigner un paiement</h2>
-              <p className="mt-1 text-sm text-zinc-600">{event.title}</p>
+              <p className="text-sm font-medium text-amber-700">Paiement</p>
+              <h2 className="mt-1 text-xl font-semibold">
+                {existingPayment
+                  ? "Modifier le paiement"
+                  : "Renseigner un paiement"}
+              </h2>
             </div>
             <button
               aria-label="Fermer"
-              className="rounded-md px-2 py-1 text-xl leading-none text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+              className="rounded-lg px-3 py-2 text-xl leading-none text-zinc-500 hover:bg-white hover:text-zinc-900"
               disabled={isSaving || isDeleting}
               onClick={onClose}
               type="button"
@@ -117,18 +124,24 @@ export function PaymentModal({
         </div>
 
         <div className="overflow-y-auto px-5 py-5">
-          <dl className="grid gap-3 rounded-lg bg-zinc-50 p-4 text-sm sm:grid-cols-3">
+          <dl className="grid gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-4 text-sm sm:grid-cols-3">
+            <div className="sm:col-span-3">
+              <dt className="text-zinc-500">Client</dt>
+              <dd className="mt-1 text-base font-semibold text-zinc-950">
+                {event.title}
+              </dd>
+            </div>
             <div className="sm:col-span-3">
               <dt className="text-zinc-500">Date</dt>
-              <dd className="font-medium">{formatDate(event.startAt)}</dd>
+              <dd className="mt-1 font-medium">{formatDate(event.startAt)}</dd>
             </div>
             <div>
               <dt className="text-zinc-500">Début</dt>
-              <dd className="font-medium">{formatTime(event.startAt)}</dd>
+              <dd className="mt-1 font-medium">{formatTime(event.startAt)}</dd>
             </div>
             <div>
               <dt className="text-zinc-500">Fin</dt>
-              <dd className="font-medium">{formatTime(event.endAt)}</dd>
+              <dd className="mt-1 font-medium">{formatTime(event.endAt)}</dd>
             </div>
           </dl>
 
@@ -136,7 +149,7 @@ export function PaymentModal({
             <label className="flex flex-col gap-2 text-sm font-medium">
               Prestation
               <select
-                className="h-11 rounded-lg border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+                className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
                 onChange={(event) => selectService(event.target.value as Service)}
                 value={service}
               >
@@ -157,24 +170,34 @@ export function PaymentModal({
 
             <label className="flex flex-col gap-2 text-sm font-medium">
               Montant
-              <input
-                className="h-11 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
-                inputMode="decimal"
-                min="0"
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="0"
-                step="1"
-                type="number"
-                value={amount}
-              />
+              <div className="flex items-center rounded-xl border border-zinc-300 bg-white focus-within:border-amber-600 focus-within:ring-2 focus-within:ring-amber-600/15">
+                <input
+                  className="h-12 min-w-0 flex-1 rounded-lg px-3 text-base outline-none"
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => setAmount(event.target.value)}
+                  placeholder="0"
+                  step="1"
+                  type="number"
+                  value={amount}
+                />
+                <span className="border-l border-zinc-200 px-3 text-zinc-500">
+                  €
+                </span>
+              </div>
+              {canValidate ? (
+                <span className="text-sm font-normal text-zinc-600">
+                  Montant enregistré : {formatCurrency(parsedAmount)}
+                </span>
+              ) : null}
             </label>
 
             <fieldset>
               <legend className="text-sm font-medium">Mode de paiement</legend>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {paymentMethods.map((paymentMethod) => (
                   <label
-                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 py-3 text-sm has-[:checked]:border-zinc-900 has-[:checked]:bg-zinc-950 has-[:checked]:text-white"
+                    className="flex min-h-14 cursor-pointer items-center justify-center rounded-xl border border-zinc-200 px-4 py-3 text-sm font-semibold capitalize transition hover:border-amber-300 has-[:checked]:border-amber-600 has-[:checked]:bg-amber-600 has-[:checked]:text-white"
                     key={paymentMethod}
                   >
                     <input
@@ -198,11 +221,11 @@ export function PaymentModal({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-zinc-200 bg-zinc-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {existingPayment ? (
               <button
-                className="h-11 rounded-lg border border-red-200 px-4 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+                className="h-12 rounded-xl border border-red-200 bg-white px-4 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
                 disabled={isSaving || isDeleting}
                 onClick={onDelete}
                 type="button"
@@ -214,7 +237,7 @@ export function PaymentModal({
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button
-              className="h-11 rounded-lg border border-zinc-300 px-4 font-medium text-zinc-700 hover:bg-zinc-50"
+              className="h-12 rounded-xl border border-zinc-300 bg-white px-4 font-medium text-zinc-700 hover:bg-zinc-50"
               disabled={isSaving || isDeleting}
               onClick={onClose}
               type="button"
@@ -222,14 +245,14 @@ export function PaymentModal({
               Annuler
             </button>
             <button
-              className="h-11 rounded-lg bg-zinc-950 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+              className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
               disabled={!canValidate || isSaving || isDeleting}
               onClick={() =>
                 onValidate({ amount: parsedAmount, method, service })
               }
               type="button"
             >
-              {isSaving ? "Enregistrement..." : "Valider"}
+              {isSaving ? "Enregistrement..." : "Enregistrer le paiement"}
             </button>
           </div>
         </div>
