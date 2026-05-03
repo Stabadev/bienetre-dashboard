@@ -20,6 +20,7 @@ export function DashboardClient({ events }: DashboardClientProps) {
   const [paymentsByEventKey, setPaymentsByEventKey] = useState<
     Record<string, SavedPayment>
   >({});
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | undefined>();
 
@@ -81,8 +82,8 @@ export function DashboardClient({ events }: DashboardClientProps) {
         body: JSON.stringify({
           appointmentUid: getEventKey(event),
           title: event.title,
-          clientName: null,
-          service: null,
+          clientName: event.title,
+          service: payment.service,
           startAt: event.startAt,
           endAt: event.endAt,
           amount: payment.amount,
@@ -105,6 +106,44 @@ export function DashboardClient({ events }: DashboardClientProps) {
       setPaymentError("Impossible d'enregistrer le paiement.");
     } finally {
       setIsSavingPayment(false);
+    }
+  }
+
+  async function deletePayment(event: CalendarEvent) {
+    const appointmentUid = getEventKey(event);
+    const confirmed = window.confirm(
+      "Supprimer ce paiement ? Le rendez-vous Google Calendar sera conservé.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeletingPayment(true);
+    setPaymentError(undefined);
+
+    try {
+      const response = await fetch(
+        `/api/payments/${encodeURIComponent(appointmentUid)}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("La suppression du paiement a échoué.");
+      }
+
+      setPaymentsByEventKey((currentPayments) => {
+        const nextPayments = { ...currentPayments };
+        delete nextPayments[appointmentUid];
+        return nextPayments;
+      });
+      setSelectedEvent(null);
+    } catch {
+      setPaymentError("Impossible de supprimer le paiement.");
+    } finally {
+      setIsDeletingPayment(false);
     }
   }
 
@@ -138,8 +177,10 @@ export function DashboardClient({ events }: DashboardClientProps) {
           event={selectedEvent}
           errorMessage={paymentError}
           existingPayment={selectedPayment}
+          isDeleting={isDeletingPayment}
           isSaving={isSavingPayment}
           onClose={() => setSelectedEvent(null)}
+          onDelete={() => deletePayment(selectedEvent)}
           onValidate={(payment) => savePayment(selectedEvent, payment)}
         />
       ) : null}

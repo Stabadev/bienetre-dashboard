@@ -8,9 +8,28 @@ type PaymentsSidebarProps = {
 };
 
 export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
+  function downloadCsv() {
+    const link = document.createElement("a");
+
+    link.href = "/api/export";
+    link.download = "paiements-bienetre-dashboard.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   return (
     <aside className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:sticky md:top-6 md:self-start">
-      <h2 className="text-lg font-semibold">Paiements renseignés</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-stretch">
+        <h2 className="text-lg font-semibold">Paiements renseignés</h2>
+        <button
+          className="h-10 rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+          onClick={downloadCsv}
+          type="button"
+        >
+          Exporter CSV
+        </button>
+      </div>
 
       {payments.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-600">

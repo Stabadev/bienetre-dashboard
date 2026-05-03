@@ -3,7 +3,12 @@
 import { useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
 import { formatDate, formatTime } from "./formatters";
-import type { PaymentDraft, PaymentMethod, SavedPayment } from "./types";
+import type {
+  PaymentDraft,
+  PaymentMethod,
+  SavedPayment,
+  Service,
+} from "./types";
 
 const paymentMethods: PaymentMethod[] = [
   "espèces",
@@ -12,12 +17,48 @@ const paymentMethods: PaymentMethod[] = [
   "carte",
 ];
 
+const services: Array<{
+  label: Service;
+  duration: string;
+  description: string;
+  price: number;
+}> = [
+  {
+    label: "Première séance",
+    duration: "1h20",
+    description: "discussion, bilan énergétique, soin et conseils personnalisés",
+    price: 75,
+  },
+  {
+    label: "Séance d’entretien",
+    duration: "50min",
+    description: "soins et suite de conseils",
+    price: 60,
+  },
+];
+
+function getInitialService(existingPayment?: SavedPayment): Service {
+  return (
+    services.find((service) => service.label === existingPayment?.service)
+      ?.label ?? services[0].label
+  );
+}
+
+function getServicePrice(serviceLabel: Service): number {
+  return (
+    services.find((service) => service.label === serviceLabel)?.price ??
+    services[0].price
+  );
+}
+
 type PaymentModalProps = {
   event: CalendarEvent;
   existingPayment?: SavedPayment;
   errorMessage?: string;
   isSaving: boolean;
+  isDeleting: boolean;
   onClose: () => void;
+  onDelete: () => void;
   onValidate: (payment: PaymentDraft) => void;
 };
 
@@ -25,18 +66,30 @@ export function PaymentModal({
   event,
   errorMessage,
   existingPayment,
+  isDeleting,
   isSaving,
   onClose,
+  onDelete,
   onValidate,
 }: PaymentModalProps) {
-  const [amount, setAmount] = useState(existingPayment?.amount.toString() ?? "");
+  const initialService = getInitialService(existingPayment);
+  const [amount, setAmount] = useState(
+    existingPayment?.amount.toString() ??
+      getServicePrice(initialService).toString(),
+  );
   const [method, setMethod] = useState<PaymentMethod>(
     existingPayment?.method ?? "espèces",
   );
+  const [service, setService] = useState<Service>(initialService);
 
   const parsedAmount = Number(amount);
   const canValidate =
     amount !== "" && Number.isInteger(parsedAmount) && parsedAmount > 0;
+
+  function selectService(serviceLabel: Service) {
+    setService(serviceLabel);
+    setAmount(getServicePrice(serviceLabel).toString());
+  }
 
   return (
     <div
@@ -54,6 +107,7 @@ export function PaymentModal({
             <button
               aria-label="Fermer"
               className="rounded-md px-2 py-1 text-xl leading-none text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+              disabled={isSaving || isDeleting}
               onClick={onClose}
               type="button"
             >
@@ -79,6 +133,28 @@ export function PaymentModal({
           </dl>
 
           <div className="mt-5 flex flex-col gap-5">
+            <label className="flex flex-col gap-2 text-sm font-medium">
+              Prestation
+              <select
+                className="h-11 rounded-lg border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+                onChange={(event) => selectService(event.target.value as Service)}
+                value={service}
+              >
+                {services.map((serviceOption) => (
+                  <option key={serviceOption.label} value={serviceOption.label}>
+                    {serviceOption.label} — {serviceOption.duration} —{" "}
+                    {serviceOption.price} €
+                  </option>
+                ))}
+              </select>
+              <span className="text-sm font-normal text-zinc-600">
+                {
+                  services.find((serviceOption) => serviceOption.label === service)
+                    ?.description
+                }
+              </span>
+            </label>
+
             <label className="flex flex-col gap-2 text-sm font-medium">
               Montant
               <input
@@ -122,23 +198,40 @@ export function PaymentModal({
           ) : null}
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            className="h-11 rounded-lg border border-zinc-300 px-4 font-medium text-zinc-700 hover:bg-zinc-50"
-            disabled={isSaving}
-            onClick={onClose}
-            type="button"
-          >
-            Annuler
-          </button>
-          <button
-            className="h-11 rounded-lg bg-zinc-950 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-            disabled={!canValidate || isSaving}
-            onClick={() => onValidate({ amount: parsedAmount, method })}
-            type="button"
-          >
-            {isSaving ? "Enregistrement..." : "Valider"}
-          </button>
+        <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {existingPayment ? (
+              <button
+                className="h-11 rounded-lg border border-red-200 px-4 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
+                disabled={isSaving || isDeleting}
+                onClick={onDelete}
+                type="button"
+              >
+                {isDeleting ? "Suppression..." : "Supprimer le paiement"}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              className="h-11 rounded-lg border border-zinc-300 px-4 font-medium text-zinc-700 hover:bg-zinc-50"
+              disabled={isSaving || isDeleting}
+              onClick={onClose}
+              type="button"
+            >
+              Annuler
+            </button>
+            <button
+              className="h-11 rounded-lg bg-zinc-950 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+              disabled={!canValidate || isSaving || isDeleting}
+              onClick={() =>
+                onValidate({ amount: parsedAmount, method, service })
+              }
+              type="button"
+            >
+              {isSaving ? "Enregistrement..." : "Valider"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

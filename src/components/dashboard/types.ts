@@ -1,6 +1,6 @@
-import type { CalendarEvent } from "@/lib/calendar";
-
 export type PaymentMethod = "espèces" | "chèque" | "virement" | "carte";
+
+export type Service = "Première séance" | "Séance d’entretien";
 
 export type SavedPayment = {
   id: string;
@@ -20,6 +20,5 @@ export type SavedPayment = {
 export type PaymentDraft = {
   amount: number;
   method: PaymentMethod;
+  service: Service;
 };
-
-export type AppointmentPayment = SavedPayment | (PaymentDraft & { event: CalendarEvent });
