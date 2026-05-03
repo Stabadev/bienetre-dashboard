@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuthResponse } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 const paymentMethods = new Set(["espèces", "chèque", "virement", "carte"]);
@@ -65,6 +66,12 @@ function readAmount(value: unknown): number | null {
 }
 
 export async function GET() {
+  const authResponse = await requireAuthResponse();
+
+  if (authResponse) {
+    return authResponse;
+  }
+
   const payments = await db.payment.findMany({
     orderBy: {
       startAt: "asc",
@@ -75,6 +82,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authResponse = await requireAuthResponse();
+
+  if (authResponse) {
+    return authResponse;
+  }
+
   let body: PaymentPayload;
 
   try {
@@ -105,32 +118,44 @@ export async function POST(request: Request) {
     );
   }
 
-  const payment = await db.payment.upsert({
-    where: {
-      appointmentUid,
-    },
-    create: {
-      appointmentUid,
-      title,
-      clientName: readOptionalString(body.clientName),
-      service: readOptionalString(body.service),
-      startAt,
-      endAt,
-      amount,
-      method,
-      paidAt: new Date(),
-    },
-    update: {
-      title,
-      clientName: readOptionalString(body.clientName),
-      service: readOptionalString(body.service),
-      startAt,
-      endAt,
-      amount,
-      method,
-      paidAt: new Date(),
-    },
-  });
+  let payment;
+
+  try {
+    payment = await db.payment.upsert({
+      where: {
+        appointmentUid,
+      },
+      create: {
+        appointmentUid,
+        title,
+        clientName: readOptionalString(body.clientName),
+        service: readOptionalString(body.service),
+        startAt,
+        endAt,
+        amount,
+        method,
+        paidAt: new Date(),
+      },
+      update: {
+        title,
+        clientName: readOptionalString(body.clientName),
+        service: readOptionalString(body.service),
+        startAt,
+        endAt,
+        amount,
+        method,
+        paidAt: new Date(),
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        error:
+          "Impossible d'enregistrer le paiement en base. Vérifie DATABASE_URL, PostgreSQL et la migration Prisma.",
+      },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json(serializePayment(payment));
 }

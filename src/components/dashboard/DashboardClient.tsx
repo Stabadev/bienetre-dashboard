@@ -15,6 +15,14 @@ function getEventKey(event: CalendarEvent): string {
   return `${event.uid}-${event.startAt}`;
 }
 
+async function readErrorMessage(response: Response): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return payload?.error ?? "La requête a échoué.";
+}
+
 export function DashboardClient({ events }: DashboardClientProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [paymentsByEventKey, setPaymentsByEventKey] = useState<
@@ -92,7 +100,7 @@ export function DashboardClient({ events }: DashboardClientProps) {
       });
 
       if (!response.ok) {
-        throw new Error("La sauvegarde du paiement a échoué.");
+        throw new Error(await readErrorMessage(response));
       }
 
       const savedPayment = (await response.json()) as SavedPayment;
@@ -102,8 +110,12 @@ export function DashboardClient({ events }: DashboardClientProps) {
         [savedPayment.appointmentUid]: savedPayment,
       }));
       setSelectedEvent(null);
-    } catch {
-      setPaymentError("Impossible d'enregistrer le paiement.");
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : "Impossible d'enregistrer le paiement.",
+      );
     } finally {
       setIsSavingPayment(false);
     }
@@ -131,7 +143,7 @@ export function DashboardClient({ events }: DashboardClientProps) {
       );
 
       if (!response.ok) {
-        throw new Error("La suppression du paiement a échoué.");
+        throw new Error(await readErrorMessage(response));
       }
 
       setPaymentsByEventKey((currentPayments) => {
@@ -140,8 +152,12 @@ export function DashboardClient({ events }: DashboardClientProps) {
         return nextPayments;
       });
       setSelectedEvent(null);
-    } catch {
-      setPaymentError("Impossible de supprimer le paiement.");
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : "Impossible de supprimer le paiement.",
+      );
     } finally {
       setIsDeletingPayment(false);
     }

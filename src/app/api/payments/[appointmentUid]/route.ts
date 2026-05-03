@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuthResponse } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 type RouteContext = {
@@ -8,6 +9,12 @@ type RouteContext = {
 };
 
 export async function DELETE(_request: Request, context: RouteContext) {
+  const authResponse = await requireAuthResponse();
+
+  if (authResponse) {
+    return authResponse;
+  }
+
   const { appointmentUid } = await context.params;
 
   await db.payment.deleteMany({
