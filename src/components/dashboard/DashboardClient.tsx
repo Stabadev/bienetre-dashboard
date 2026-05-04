@@ -413,7 +413,7 @@ function AppointmentSection({
   }
 
   return (
-    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+    <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80">
       {events.map((event) => (
         <AppointmentCard
           event={event}

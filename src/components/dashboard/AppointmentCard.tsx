@@ -19,62 +19,67 @@ export function AppointmentCard({
 
   return (
     <button
-      className={`w-full rounded-2xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 ${
+      className={`w-full border-b px-3 py-3 text-left transition last:border-b-0 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 sm:px-4 ${
         isPaid
-          ? "border-emerald-100 bg-white/90"
+          ? "border-emerald-100 bg-emerald-50/40"
           : "border-amber-200 bg-white"
       }`}
       onClick={() => onSelect(event)}
       type="button"
     >
-      <article>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-zinc-500">Client</p>
-            <h2 className="mt-1 text-xl font-semibold text-zinc-950">
-              {event.title}
-            </h2>
-            <p className="mt-2 text-sm text-zinc-600">
-              {formatDate(event.startAt)}
-            </p>
-          </div>
+      <article className="grid gap-2 text-sm sm:grid-cols-[minmax(8.5rem,11rem)_minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(5.5rem,auto)_minmax(8rem,auto)] sm:items-center sm:gap-4">
+        <div className="flex items-baseline gap-2 sm:block">
+          <p className="font-semibold text-zinc-950">
+            {formatTime(event.startAt)}
+            <span className="font-normal text-zinc-500">
+              {" "}
+              - {formatTime(event.endAt)}
+            </span>
+          </p>
+          <p className="truncate text-xs font-medium text-zinc-500 sm:mt-0.5">
+            {formatDate(event.startAt)}
+          </p>
+        </div>
+
+        <div className="min-w-0">
+          <h3 className="truncate font-semibold text-zinc-950">
+            {event.title}
+          </h3>
+          <p className="mt-0.5 truncate text-xs text-zinc-500 sm:hidden">
+            {payment?.service ?? "Prestation à préciser"}
+          </p>
+        </div>
+
+        <p className="hidden min-w-0 truncate text-zinc-600 sm:block">
+          {payment?.service ?? "Prestation à préciser"}
+        </p>
+
+        <p
+          className={`font-semibold ${
+            isPaid ? "text-emerald-800" : "text-amber-800"
+          }`}
+        >
+          {payment ? formatCurrency(payment.amount) : "A saisir"}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <span
             aria-label={
               isPaid ? "Paiement renseigné" : "Paiement non renseigné"
             }
-            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-sm font-medium ${
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
               isPaid
                 ? "bg-emerald-100 text-emerald-800"
                 : "bg-amber-100 text-amber-800"
             }`}
             title={isPaid ? "Paiement renseigné" : "Paiement non renseigné"}
           >
-            {isPaid ? "✅ Paiement enregistré" : "❓ Paiement à renseigner"}
+            {payment ? payment.method : "Paiement à renseigner"}
+          </span>
+          <span className="text-xs font-semibold text-amber-700">
+            {payment ? "Modifier" : "Ajouter"}
           </span>
         </div>
-
-        <dl className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-4 text-sm">
-          <div>
-            <dt className="text-zinc-500">Début</dt>
-            <dd className="mt-1 font-semibold">{formatTime(event.startAt)}</dd>
-          </div>
-          <div>
-            <dt className="text-zinc-500">Fin</dt>
-            <dd className="mt-1 font-semibold">{formatTime(event.endAt)}</dd>
-          </div>
-        </dl>
-
-        {payment ? (
-          <div className="mt-4 grid gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            <p>
-              <span className="font-semibold">
-                {formatCurrency(payment.amount)}
-              </span>{" "}
-              par {payment.method}
-            </p>
-            {payment.service ? <p>{payment.service}</p> : null}
-          </div>
-        ) : null}
       </article>
     </button>
   );
