@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bienetre-dashboard-dev-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3006:3000"
+    depends_on:
+      - db
+    networks:
+      - bienetre_dashboard_dev
+
+  db:
+    image: postgres:16
+    container_name: bienetre-dashboard-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bienetre_dashboard}
+      POSTGRES_USER: ${POSTGRES_USER:-bienetre}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bienetre_password}
+    volumes:
+      - bienetre_dashboard_dev_postgres_data:/var/lib/postgresql/data
+    networks:
+      - bienetre_dashboard_dev
+
+volumes:
+  bienetre_dashboard_dev_postgres_data:
+
+networks:
+  bienetre_dashboard_dev:

@@ -233,140 +233,49 @@ Il permet :
 - d'exporter les paiements en CSV ;
 - d'accéder à une page d'aide expliquant le fonctionnement.
 
-## 9. Déploiement sur VPS
+## 9. Environnements et déploiement VPS
 
-Cette section décrit une mise en production propre sur un VPS avec Docker Compose et Caddy.
+Le projet supporte trois environnements :
 
-Objectif :
+- local sur le PC de développement ;
+- dev VPS sur `dev.bienetre.alexsoutienscolaire.fr` ;
+- prod VPS sur `bienetre.alexsoutienscolaire.fr`.
 
-- Dockeriser l'application Next.js ;
-- faire tourner PostgreSQL dans Docker ;
-- exposer uniquement l'application localement sur le VPS ;
-- publier le site via Caddy et HTTPS automatique.
+Le développement local reste volontairement simple : l'application tourne avec `npm run dev` sur la machine, et Docker ne sert qu'à lancer PostgreSQL. Les environnements VPS utilisent des fichiers Compose dédiés pour éviter les conflits de ports, de conteneurs, de volumes et de réseaux.
 
-### 9.1 Dockeriser l'application Next.js
+### 9.1 Développement local
 
-Créer un fichier `Dockerfile` à la racine du projet :
+Le fichier `docker-compose.yml` reste dédié au local et lance uniquement la base PostgreSQL.
 
-```dockerfile
-FROM node:22-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate
-RUN npm run build
-
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/next.config.ts ./next.config.ts
-
-EXPOSE 3000
-
-CMD ["npm", "run", "start"]
+```bash
+docker compose up -d db
+npx prisma migrate dev
+npm run dev
 ```
 
-Le conteneur lance l'application en mode production :
-
-```text
-next build
-next start
-```
-
-### 9.2 Docker Compose complet
-
-Le `docker-compose.yml` de production doit contenir au minimum :
-
-- un service `app` pour Next.js ;
-- un service `db` pour PostgreSQL ;
-- un réseau interne partagé ;
-- les variables d'environnement injectées ;
-- PostgreSQL non exposé publiquement ;
-- l'application exposée seulement en local, par exemple `127.0.0.1:3005:3000`.
-
-Exemple :
-
-```yaml
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: bienetre-dashboard-app
-    restart: unless-stopped
-    env_file:
-      - .env.local
-    ports:
-      - "127.0.0.1:3005:3000"
-    depends_on:
-      - db
-    networks:
-      - bienetre_network
-
-  db:
-    image: postgres:16
-    container_name: bienetre-dashboard-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: bienetre_dashboard
-      POSTGRES_USER: bienetre
-      POSTGRES_PASSWORD: bienetre_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - bienetre_network
-
-volumes:
-  postgres_data:
-
-networks:
-  bienetre_network:
-```
-
-Important :
-
-- ne pas exposer PostgreSQL avec `ports: "5432:5432"` en production ;
-- utiliser `DATABASE_URL` avec l'hôte `db` dans `.env.local` :
+En local, `DATABASE_URL` pointe vers PostgreSQL exposé sur la machine :
 
 ```env
-DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard"
+DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
 ```
 
-### 9.3 Préparation du VPS
+### 9.2 Image Docker de production
 
-Créer un dossier projet :
+Le `Dockerfile` construit l'application Next.js en mode production :
 
-```bash
-sudo mkdir -p /opt/apps/bienetre-dashboard
-sudo chown -R $USER:$USER /opt/apps/bienetre-dashboard
-cd /opt/apps/bienetre-dashboard
-```
+- installation propre avec `npm ci` ;
+- génération Prisma avec `npx prisma generate` ;
+- build Next.js avec `npm run build` ;
+- démarrage avec `npm run start` ;
+- port interne `3000`.
 
-Cloner le repository :
+Le fichier `.dockerignore` exclut les dossiers et secrets locaux de l'image Docker.
 
-```bash
-git clone <URL_DU_REPO> .
-```
+### 9.3 Variables d'environnement VPS
 
-Créer le fichier `.env.local` :
+Sur le VPS, chaque instance possède son propre dossier et son propre fichier `.env`.
 
-```bash
-nano .env.local
-```
-
-Exemple production :
+Variables attendues :
 
 ```env
 ICAL_SECRET_URL="https://calendar.google.com/calendar/ical/..."
@@ -374,60 +283,102 @@ DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD_HASH="\$2b\$12\$..."
 SESSION_SECRET="..."
+POSTGRES_DB="bienetre_dashboard"
+POSTGRES_USER="bienetre"
+POSTGRES_PASSWORD="bienetre_password"
 ```
 
-Attention :
+Important :
 
-- d'autres applications Docker peuvent déjà tourner sur le VPS ;
-- vérifier les ports utilisés avant de choisir `3005` ;
-- ne pas exposer publiquement le port de l'application ;
-- Caddy fera l'exposition publique via HTTPS.
+- `DATABASE_URL` doit utiliser l'hôte `db` sur le VPS, car PostgreSQL tourne dans le réseau Docker interne ;
+- `POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` doivent correspondre à `DATABASE_URL` ;
+- ne jamais commit de vrais secrets ;
+- ne jamais préfixer `ICAL_SECRET_URL` avec `NEXT_PUBLIC_`.
 
-### 9.4 Lancement sur VPS
+### 9.4 Déploiement dev VPS
 
-Construire et lancer les conteneurs :
+Dossier prévu :
 
 ```bash
-docker compose up -d --build
+/opt/apps/bienetre-dashboard-dev
 ```
 
-Vérifier que les conteneurs tournent :
+Préparer l'application :
 
 ```bash
-docker compose ps
+sudo mkdir -p /opt/apps/bienetre-dashboard-dev
+sudo chown -R $USER:$USER /opt/apps/bienetre-dashboard-dev
+cd /opt/apps/bienetre-dashboard-dev
+git clone <URL_DU_REPO> .
+nano .env
 ```
 
-Voir les logs :
+Construire et lancer l'instance dev :
 
 ```bash
-docker compose logs -f app
-docker compose logs -f db
+docker compose -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.dev.yml exec app npx prisma migrate deploy
 ```
 
-Appliquer les migrations Prisma en production :
-
-```bash
-docker compose exec app npx prisma migrate deploy
-```
-
-Tester localement depuis le VPS :
-
-```bash
-curl http://127.0.0.1:3005
-```
-
-### 9.5 Reverse proxy avec Caddy
-
-Configurer un domaine, par exemple :
+L'application dev écoute uniquement en local sur le VPS :
 
 ```text
-bienetre.ton-domaine.fr
+127.0.0.1:3006
 ```
 
-Exemple de configuration Caddy :
+Elle est ensuite publiée par Caddy sur :
+
+```text
+dev.bienetre.alexsoutienscolaire.fr
+```
+
+### 9.5 Déploiement prod VPS
+
+Dossier prévu :
+
+```bash
+/opt/apps/bienetre-dashboard-prod
+```
+
+Préparer l'application :
+
+```bash
+sudo mkdir -p /opt/apps/bienetre-dashboard-prod
+sudo chown -R $USER:$USER /opt/apps/bienetre-dashboard-prod
+cd /opt/apps/bienetre-dashboard-prod
+git clone <URL_DU_REPO> .
+nano .env
+```
+
+Construire et lancer l'instance prod :
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml exec app npx prisma migrate deploy
+```
+
+L'application prod écoute uniquement en local sur le VPS :
+
+```text
+127.0.0.1:3005
+```
+
+Elle est ensuite publiée par Caddy sur :
+
+```text
+bienetre.alexsoutienscolaire.fr
+```
+
+### 9.6 Caddy
+
+Configuration Caddy :
 
 ```caddyfile
-bienetre.ton-domaine.fr {
+dev.bienetre.alexsoutienscolaire.fr {
+    reverse_proxy localhost:3006
+}
+
+bienetre.alexsoutienscolaire.fr {
     reverse_proxy localhost:3005
 }
 ```
@@ -438,37 +389,35 @@ Recharger Caddy :
 sudo systemctl reload caddy
 ```
 
-Caddy gère automatiquement HTTPS si :
+Caddy gère automatiquement HTTPS si les DNS pointent vers le VPS et si les ports 80 et 443 sont ouverts.
 
-- le domaine pointe vers le VPS ;
-- les ports 80 et 443 sont ouverts ;
-- Caddy est correctement installé et lancé.
+### 9.7 Séparation dev/prod
 
-### 9.6 DNS
+Les fichiers VPS sont séparés :
 
-Chez le registrar ou fournisseur DNS :
+- `docker-compose.dev.yml` pour l'instance dev ;
+- `docker-compose.prod.yml` pour l'instance prod.
 
-- ajouter un enregistrement `A` ;
-- nom : `bienetre` ;
-- valeur : IP publique du VPS.
+Chaque instance possède :
 
-Exemple :
+- son conteneur app ;
+- son conteneur PostgreSQL ;
+- son volume PostgreSQL ;
+- son réseau Docker ;
+- son port applicatif local.
 
-```text
-bienetre.ton-domaine.fr -> 123.123.123.123
+PostgreSQL n'est pas exposé publiquement dans les fichiers VPS. Seule l'application est bindée sur `127.0.0.1`, puis Caddy expose les domaines HTTPS.
+
+### 9.8 Vérifications
+
+Avant de déployer :
+
+```bash
+npm run lint
+npm run build
+docker compose -f docker-compose.dev.yml config
+docker compose -f docker-compose.prod.yml config
 ```
-
-Attendre la propagation DNS.
-
-### 9.7 Sécurité minimale
-
-- Accéder à l'application uniquement via Caddy.
-- Ne pas exposer PostgreSQL publiquement.
-- Ne pas exposer directement le port Docker de l'application sur Internet.
-- Garder les secrets uniquement dans `.env.local`.
-- Utiliser un `SESSION_SECRET` long et aléatoire.
-- Le cookie de session est `httpOnly`.
-- En production, le cookie est marqué `secure`.
 
 ## 10. Notes importantes
 
