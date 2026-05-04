@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -23,6 +24,13 @@ export default async function LoginPage() {
         </div>
 
         <LoginForm />
+
+        <Link
+          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-zinc-200 bg-white/90 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-white"
+          href="/"
+        >
+          Retour à l&apos;accueil
+        </Link>
       </section>
     </main>
   );
