@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
 import { AppointmentCard } from "./AppointmentCard";
 import { PaymentModal } from "./PaymentModal";
@@ -11,20 +11,52 @@ type DashboardClientProps = {
   events: CalendarEvent[];
 };
 
+type SectionKey = "overdue" | "today" | "paid" | "upcoming";
+
 function getEventKey(event: CalendarEvent): string {
   return `${event.uid}-${event.startAt}`;
 }
 
-function getDisplayWindowEnd(): Date {
-  const endDate = new Date();
-  endDate.setDate(endDate.getDate() + 7);
-  endDate.setHours(23, 59, 59, 999);
-
-  return endDate;
-}
-
 function sortEventsByStartAt(eventA: CalendarEvent, eventB: CalendarEvent) {
   return new Date(eventA.startAt).getTime() - new Date(eventB.startAt).getTime();
+}
+
+function isSameCalendarDay(dateA: Date, dateB: Date): boolean {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
+
+function getWeekStart(date: Date): Date {
+  const weekStart = new Date(date);
+  const day = weekStart.getDay();
+  const distanceFromMonday = day === 0 ? 6 : day - 1;
+
+  weekStart.setDate(weekStart.getDate() - distanceFromMonday);
+  weekStart.setHours(0, 0, 0, 0);
+
+  return weekStart;
+}
+
+function getWeekEnd(date: Date): Date {
+  const weekEnd = getWeekStart(date);
+
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  return weekEnd;
+}
+
+function isDateInCurrentWeek(value: string): boolean {
+  const date = new Date(value);
+  const now = new Date();
+
+  return (
+    date.getTime() >= getWeekStart(now).getTime() &&
+    date.getTime() <= getWeekEnd(now).getTime()
+  );
 }
 
 function getClientName(event: CalendarEvent, payment: PaymentDraft): string {
@@ -55,6 +87,14 @@ export function DashboardClient({ events }: DashboardClientProps) {
     string | undefined
   >();
   const [paymentError, setPaymentError] = useState<string | undefined>();
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(
+    {
+      overdue: true,
+      today: true,
+      paid: true,
+      upcoming: false,
+    },
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -100,27 +140,50 @@ export function DashboardClient({ events }: DashboardClientProps) {
     };
   }, []);
 
-  const displayedEvents = useMemo(
-    () =>
-      events
-        .filter(
-          (event) => new Date(event.startAt).getTime() <= getDisplayWindowEnd().getTime(),
-        )
-        .sort(sortEventsByStartAt),
+  const sortedEvents = useMemo(
+    () => [...events].sort(sortEventsByStartAt),
     [events],
-  );
-
-  const unpaidEvents = useMemo(
-    () =>
-      displayedEvents.filter((event) => paymentsByEventKey[getEventKey(event)] === undefined),
-    [displayedEvents, paymentsByEventKey],
   );
 
   const paidEvents = useMemo(
     () =>
-      displayedEvents.filter((event) => paymentsByEventKey[getEventKey(event)] !== undefined),
-    [displayedEvents, paymentsByEventKey],
+      sortedEvents.filter((event) => paymentsByEventKey[getEventKey(event)] !== undefined),
+    [sortedEvents, paymentsByEventKey],
   );
+
+  const unpaidEvents = useMemo(
+    () =>
+      sortedEvents.filter((event) => paymentsByEventKey[getEventKey(event)] === undefined),
+    [sortedEvents, paymentsByEventKey],
+  );
+
+  const overdueEvents = useMemo(() => {
+    const now = new Date();
+
+    return unpaidEvents.filter((event) => {
+      const startAt = new Date(event.startAt);
+
+      return startAt.getTime() < now.getTime() && !isSameCalendarDay(startAt, now);
+    });
+  }, [unpaidEvents]);
+
+  const todayEvents = useMemo(() => {
+    const now = new Date();
+
+    return unpaidEvents.filter((event) =>
+      isSameCalendarDay(new Date(event.startAt), now),
+    );
+  }, [unpaidEvents]);
+
+  const upcomingEvents = useMemo(() => {
+    const now = new Date();
+
+    return unpaidEvents.filter((event) => {
+      const startAt = new Date(event.startAt);
+
+      return startAt.getTime() > now.getTime() && !isSameCalendarDay(startAt, now);
+    });
+  }, [unpaidEvents]);
 
   const displayedPayments = useMemo(
     () =>
@@ -130,18 +193,26 @@ export function DashboardClient({ events }: DashboardClientProps) {
     [paidEvents, paymentsByEventKey],
   );
 
-  const totalAmount = useMemo(
+  const weeklyAmount = useMemo(
     () =>
-      displayedPayments.reduce(
-        (total, payment) => total + payment.amount,
-        0,
-      ),
+      displayedPayments
+        .filter((payment) =>
+          isDateInCurrentWeek(payment.paidAt ?? payment.startAt),
+        )
+        .reduce((total, payment) => total + payment.amount, 0),
     [displayedPayments],
   );
 
   const selectedPayment = selectedEvent
     ? paymentsByEventKey[getEventKey(selectedEvent)]
     : undefined;
+
+  function toggleSection(section: SectionKey) {
+    setOpenSections((currentSections) => ({
+      ...currentSections,
+      [section]: !currentSections[section],
+    }));
+  }
 
   async function savePayment(event: CalendarEvent, payment: PaymentDraft) {
     setIsSavingPayment(true);
@@ -239,45 +310,43 @@ export function DashboardClient({ events }: DashboardClientProps) {
     <>
       <div className="grid gap-6">
         <SummaryCards
+          overdueCount={overdueEvents.length}
           paidCount={displayedPayments.length}
-          totalAmount={totalAmount}
-          unpaidCount={unpaidEvents.length}
+          todayCount={todayEvents.length}
+          weeklyAmount={weeklyAmount}
         />
 
-        <section className="rounded-3xl border border-white/70 bg-white/75 p-4 shadow-sm backdrop-blur sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Paiements à renseigner</h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                Rendez-vous passés et 7 prochains jours sans paiement.
-              </p>
-            </div>
-            <span className="inline-flex w-fit rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
-              {unpaidEvents.length} à traiter
-            </span>
-          </div>
+        <DashboardStatus
+          isLoading={isLoadingPayments}
+          message={paymentsLoadError}
+        />
 
-          <DashboardStatus
-            isLoading={isLoadingPayments}
-            message={paymentsLoadError}
-          />
+        <DashboardSection
+          count={overdueEvents.length}
+          emptyMessage="Aucun paiement en retard."
+          events={overdueEvents}
+          isOpen={openSections.overdue}
+          onToggle={() => toggleSection("overdue")}
+          onSelect={setSelectedEvent}
+          paymentsByEventKey={paymentsByEventKey}
+          tone="urgent"
+          title="En retard"
+        />
 
-          <AppointmentSection
-            emptyMessage="Aucun paiement à renseigner sur la période affichée."
-            events={unpaidEvents}
-            onSelect={setSelectedEvent}
-            paymentsByEventKey={paymentsByEventKey}
-          />
-        </section>
+        <DashboardSection
+          count={todayEvents.length}
+          emptyMessage="Aucun paiement à renseigner aujourd'hui."
+          events={todayEvents}
+          isOpen={openSections.today}
+          onToggle={() => toggleSection("today")}
+          onSelect={setSelectedEvent}
+          paymentsByEventKey={paymentsByEventKey}
+          tone="active"
+          title="Aujourd'hui"
+        />
 
-        <section className="rounded-3xl border border-white/70 bg-white/75 p-4 shadow-sm backdrop-blur sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Paiements enregistrés</h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                Paiements sauvegardés pour les rendez-vous affichés.
-              </p>
-            </div>
+        <DashboardSection
+          action={
             <button
               className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
               onClick={downloadCsv}
@@ -285,15 +354,29 @@ export function DashboardClient({ events }: DashboardClientProps) {
             >
               Exporter CSV
             </button>
-          </div>
+          }
+          count={paidEvents.length}
+          emptyMessage="Aucun paiement enregistré pour le moment."
+          events={paidEvents}
+          isOpen={openSections.paid}
+          onToggle={() => toggleSection("paid")}
+          onSelect={setSelectedEvent}
+          paymentsByEventKey={paymentsByEventKey}
+          tone="paid"
+          title="Paiements enregistrés"
+        />
 
-          <AppointmentSection
-            emptyMessage="Aucun paiement enregistré pour le moment."
-            events={paidEvents}
-            onSelect={setSelectedEvent}
-            paymentsByEventKey={paymentsByEventKey}
-          />
-        </section>
+        <DashboardSection
+          count={upcomingEvents.length}
+          emptyMessage="Aucun rendez-vous à venir sans paiement."
+          events={upcomingEvents}
+          isOpen={openSections.upcoming}
+          onToggle={() => toggleSection("upcoming")}
+          onSelect={setSelectedEvent}
+          paymentsByEventKey={paymentsByEventKey}
+          tone="muted"
+          title="À venir"
+        />
       </div>
 
       {selectedEvent ? (
@@ -323,18 +406,34 @@ function downloadCsv() {
 }
 
 function SummaryCards({
+  overdueCount,
   paidCount,
-  totalAmount,
-  unpaidCount,
+  todayCount,
+  weeklyAmount,
 }: {
+  overdueCount: number;
   paidCount: number;
-  totalAmount: number;
-  unpaidCount: number;
+  todayCount: number;
+  weeklyAmount: number;
 }) {
   const cards = [
     {
-      label: "Total encaissé",
-      value: formatCurrency(totalAmount),
+      label: "En retard",
+      value: overdueCount.toString(),
+      className: "bg-amber-600 text-white",
+      valueClassName: "text-white",
+      labelClassName: "text-amber-50",
+    },
+    {
+      label: "À traiter aujourd'hui",
+      value: todayCount.toString(),
+      className: "bg-emerald-50 text-emerald-950",
+      valueClassName: "text-emerald-900",
+      labelClassName: "text-emerald-700",
+    },
+    {
+      label: "Encaissé cette semaine",
+      value: formatCurrency(weeklyAmount),
       className: "bg-zinc-950 text-white",
       valueClassName: "text-white",
       labelClassName: "text-zinc-300",
@@ -342,22 +441,8 @@ function SummaryCards({
     {
       label: "Paiements enregistrés",
       value: paidCount.toString(),
-      className: "bg-emerald-50 text-emerald-950",
-      valueClassName: "text-emerald-900",
-      labelClassName: "text-emerald-700",
-    },
-    {
-      label: "Paiements à renseigner",
-      value: unpaidCount.toString(),
-      className: "bg-amber-50 text-amber-950",
-      valueClassName: "text-amber-900",
-      labelClassName: "text-amber-700",
-    },
-    {
-      label: "Période affichée",
-      value: "Passé + 7 jours",
       className: "bg-white text-zinc-950",
-      valueClassName: "text-zinc-950 text-xl",
+      valueClassName: "text-zinc-950",
       labelClassName: "text-zinc-500",
     },
   ];
@@ -377,6 +462,80 @@ function SummaryCards({
           </p>
         </article>
       ))}
+    </section>
+  );
+}
+
+function DashboardSection({
+  action,
+  count,
+  emptyMessage,
+  events,
+  isOpen,
+  onSelect,
+  onToggle,
+  paymentsByEventKey,
+  title,
+  tone,
+}: {
+  action?: ReactNode;
+  count: number;
+  emptyMessage: string;
+  events: CalendarEvent[];
+  isOpen: boolean;
+  onSelect: (event: CalendarEvent) => void;
+  onToggle: () => void;
+  paymentsByEventKey: Record<string, SavedPayment>;
+  title: string;
+  tone: "urgent" | "active" | "paid" | "muted";
+}) {
+  const toneStyles = {
+    urgent: {
+      section: "border-amber-200 bg-amber-50/85",
+      title: "text-amber-950",
+    },
+    active: {
+      section: "border-emerald-200 bg-emerald-50/80",
+      title: "text-emerald-950",
+    },
+    paid: {
+      section: "border-white/70 bg-white/75",
+      title: "text-zinc-950",
+    },
+    muted: {
+      section: "border-zinc-200 bg-white/55",
+      title: "text-zinc-700",
+    },
+  }[tone];
+
+  return (
+    <section
+      className={`rounded-3xl border p-4 shadow-sm backdrop-blur sm:p-6 ${toneStyles.section}`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          className={`flex w-fit items-center gap-2 text-left text-xl font-semibold ${toneStyles.title}`}
+          onClick={onToggle}
+          type="button"
+        >
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base shadow-sm">
+            {isOpen ? "-" : "+"}
+          </span>
+          <span>
+            {title} ({count})
+          </span>
+        </button>
+        {action}
+      </div>
+
+      {isOpen ? (
+        <AppointmentSection
+          emptyMessage={emptyMessage}
+          events={events}
+          onSelect={onSelect}
+          paymentsByEventKey={paymentsByEventKey}
+        />
+      ) : null}
     </section>
   );
 }

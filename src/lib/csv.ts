@@ -1,4 +1,4 @@
-type CsvPayment = {
+export type ExportPayment = {
   title: string;
   clientFirstName: string | null;
   clientLastName: string | null;
@@ -7,6 +7,16 @@ type CsvPayment = {
   startAt: Date;
   amount: number;
   method: string;
+};
+
+export type PaymentExportRow = {
+  date: string;
+  lastName: string;
+  firstName: string;
+  cashAmount: number | "";
+  checkAmount: number | "";
+  transferAmount: number | "";
+  service: string;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -42,7 +52,9 @@ function normalizePaymentMethod(method: string): string {
     .trim();
 }
 
-function getAmountColumns(payment: CsvPayment): [number | "", number | "", number | ""] {
+function getAmountColumns(
+  payment: ExportPayment,
+): [number | "", number | "", number | ""] {
   const method = normalizePaymentMethod(payment.method);
 
   if (method === "especes" || method === "espece" || method === "cash") {
@@ -60,7 +72,25 @@ function getAmountColumns(payment: CsvPayment): [number | "", number | "", numbe
   return ["", "", ""];
 }
 
-export function buildPaymentsCsv(payments: CsvPayment[]): string {
+export function buildPaymentExportRows(
+  payments: ExportPayment[],
+): PaymentExportRow[] {
+  return payments.map((payment) => {
+    const [cashAmount, checkAmount, transferAmount] = getAmountColumns(payment);
+
+    return {
+      date: dateFormatter.format(payment.startAt),
+      lastName: formatUppercase(payment.clientLastName ?? payment.clientName),
+      firstName: formatUppercase(payment.clientFirstName),
+      cashAmount,
+      checkAmount,
+      transferAmount,
+      service: payment.service ?? payment.title,
+    };
+  });
+}
+
+export function buildPaymentsCsv(payments: ExportPayment[]): string {
   const headers = [
     "Date",
     "Nom",
@@ -71,19 +101,15 @@ export function buildPaymentsCsv(payments: CsvPayment[]): string {
     "Prestation",
   ];
 
-  const rows = payments.map((payment) => {
-    const [cashAmount, checkAmount, transferAmount] = getAmountColumns(payment);
-
-    return [
-      dateFormatter.format(payment.startAt),
-      formatUppercase(payment.clientLastName ?? payment.clientName),
-      formatUppercase(payment.clientFirstName),
-      cashAmount,
-      checkAmount,
-      transferAmount,
-      payment.service ?? payment.title,
-    ];
-  });
+  const rows = buildPaymentExportRows(payments).map((row) => [
+    row.date,
+    row.lastName,
+    row.firstName,
+    row.cashAmount,
+    row.checkAmount,
+    row.transferAmount,
+    row.service,
+  ]);
 
   const csvContent = [headers, ...rows]
     .map((row) => row.map(escapeCsvValue).join(";"))
