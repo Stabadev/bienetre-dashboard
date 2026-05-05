@@ -147,11 +147,20 @@ async function getCalendlyScheduledEvents(
   token: string,
   userUri: string,
 ): Promise<CalendlyScheduledEvent[]> {
+  const minStartTime = new Date();
+  minStartTime.setDate(minStartTime.getDate() - 30);
+
+  const maxStartTime = new Date();
+  maxStartTime.setDate(maxStartTime.getDate() + 30);
+
   const scheduledEventsUrl = new URL(
     `${CALENDLY_API_BASE_URL}/scheduled_events`,
   );
 
   scheduledEventsUrl.searchParams.set("user", userUri);
+  scheduledEventsUrl.searchParams.set("min_start_time", minStartTime.toISOString());
+  scheduledEventsUrl.searchParams.set("max_start_time", maxStartTime.toISOString());
+  scheduledEventsUrl.searchParams.set("count", "15");
   scheduledEventsUrl.searchParams.set("sort", "start_time:asc");
 
   const events: CalendlyScheduledEvent[] = [];

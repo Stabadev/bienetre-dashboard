@@ -6,8 +6,14 @@ const paymentMethods = new Set(["espèces", "chèque", "virement"]);
 
 type PaymentPayload = {
   appointmentUid?: unknown;
+  calendlyEventUri?: unknown;
+  calendlyInviteeUri?: unknown;
   title?: unknown;
+  clientFirstName?: unknown;
+  clientLastName?: unknown;
   clientName?: unknown;
+  clientEmail?: unknown;
+  clientPhone?: unknown;
   service?: unknown;
   startAt?: unknown;
   endAt?: unknown;
@@ -18,8 +24,14 @@ type PaymentPayload = {
 function serializePayment(payment: {
   id: string;
   appointmentUid: string;
+  calendlyEventUri: string | null;
+  calendlyInviteeUri: string | null;
   title: string;
+  clientFirstName: string | null;
+  clientLastName: string | null;
   clientName: string | null;
+  clientEmail: string | null;
+  clientPhone: string | null;
   service: string | null;
   startAt: Date;
   endAt: Date;
@@ -98,6 +110,14 @@ export async function POST(request: Request) {
 
   const appointmentUid = readRequiredString(body.appointmentUid);
   const title = readRequiredString(body.title);
+  const calendlyEventUri = readOptionalString(body.calendlyEventUri);
+  const calendlyInviteeUri = readOptionalString(body.calendlyInviteeUri);
+  const clientFirstName = readOptionalString(body.clientFirstName);
+  const clientLastName = readOptionalString(body.clientLastName);
+  const clientName = readOptionalString(body.clientName);
+  const clientEmail = readOptionalString(body.clientEmail);
+  const clientPhone = readOptionalString(body.clientPhone);
+  const service = readOptionalString(body.service);
   const startAt = readDate(body.startAt);
   const endAt = readDate(body.endAt);
   const amount = readAmount(body.amount);
@@ -127,9 +147,15 @@ export async function POST(request: Request) {
       },
       create: {
         appointmentUid,
+        calendlyEventUri,
+        calendlyInviteeUri,
         title,
-        clientName: readOptionalString(body.clientName),
-        service: readOptionalString(body.service),
+        clientFirstName,
+        clientLastName,
+        clientName,
+        clientEmail,
+        clientPhone,
+        service,
         startAt,
         endAt,
         amount,
@@ -137,9 +163,15 @@ export async function POST(request: Request) {
         paidAt: new Date(),
       },
       update: {
+        calendlyEventUri,
+        calendlyInviteeUri,
         title,
-        clientName: readOptionalString(body.clientName),
-        service: readOptionalString(body.service),
+        clientFirstName,
+        clientLastName,
+        clientName,
+        clientEmail,
+        clientPhone,
+        service,
         startAt,
         endAt,
         amount,

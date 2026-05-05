@@ -27,8 +27,8 @@ function sortEventsByStartAt(eventA: CalendarEvent, eventB: CalendarEvent) {
   return new Date(eventA.startAt).getTime() - new Date(eventB.startAt).getTime();
 }
 
-function getClientName(event: CalendarEvent): string {
-  const fullName = [event.clientLastName, event.clientFirstName]
+function getClientName(event: CalendarEvent, payment: PaymentDraft): string {
+  const fullName = [payment.clientLastName, payment.clientFirstName]
     .filter(Boolean)
     .join(" ");
 
@@ -155,11 +155,15 @@ export function DashboardClient({ events }: DashboardClientProps) {
         },
         body: JSON.stringify({
           appointmentUid: getEventKey(event),
+          calendlyEventUri: event.calendlyEventUri,
+          calendlyInviteeUri: event.calendlyInviteeUri,
           title: event.title,
-          clientName: getClientName(event),
-          email: event.clientEmail,
-          phone: event.clientPhone,
-          service: payment.service,
+          clientFirstName: payment.clientFirstName,
+          clientLastName: payment.clientLastName,
+          clientName: getClientName(event, payment),
+          clientEmail: event.clientEmail,
+          clientPhone: event.clientPhone,
+          service: event.title,
           startAt: event.startAt,
           endAt: event.endAt,
           amount: payment.amount,

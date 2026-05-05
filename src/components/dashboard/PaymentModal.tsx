@@ -7,44 +7,9 @@ import type {
   PaymentDraft,
   PaymentMethod,
   SavedPayment,
-  Service,
 } from "./types";
 
 const paymentMethods: PaymentMethod[] = ["espèces", "chèque", "virement"];
-
-const services: Array<{
-  label: Service;
-  duration: string;
-  description: string;
-  price: number;
-}> = [
-  {
-    label: "Première séance",
-    duration: "1h20",
-    description: "discussion, bilan énergétique, soin et conseils personnalisés",
-    price: 75,
-  },
-  {
-    label: "Séance d’entretien",
-    duration: "50min",
-    description: "soins et suite de conseils",
-    price: 60,
-  },
-];
-
-function getInitialService(existingPayment?: SavedPayment): Service {
-  return (
-    services.find((service) => service.label === existingPayment?.service)
-      ?.label ?? services[0].label
-  );
-}
-
-function getServicePrice(serviceLabel: Service): number {
-  return (
-    services.find((service) => service.label === serviceLabel)?.price ??
-    services[0].price
-  );
-}
 
 function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod {
   return (
@@ -54,22 +19,40 @@ function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod 
   );
 }
 
+function getInitialClientFirstName(
+  event: CalendarEvent,
+  existingPayment?: SavedPayment,
+): string {
+  return existingPayment?.clientFirstName ?? event.clientFirstName ?? "";
+}
+
+function getInitialClientLastName(
+  event: CalendarEvent,
+  existingPayment?: SavedPayment,
+): string {
+  return existingPayment?.clientLastName ?? event.clientLastName ?? "";
+}
+
 function capitalizeFirstLetter(value: string): string {
   return value.charAt(0).toLocaleUpperCase("fr-FR") + value.slice(1);
 }
 
-function getClientDisplayName(event: CalendarEvent): string {
-  if (event.clientLastName) {
-    const lastName = event.clientLastName.toLocaleUpperCase("fr-FR");
+function getClientDisplayName(
+  firstName: string,
+  lastName: string,
+  fallbackName: string | null,
+): string {
+  if (lastName.trim()) {
+    const formattedLastName = lastName.trim().toLocaleUpperCase("fr-FR");
 
-    if (event.clientFirstName) {
-      return `${capitalizeFirstLetter(event.clientFirstName)} ${lastName}`;
+    if (firstName.trim()) {
+      return `${capitalizeFirstLetter(firstName.trim())} ${formattedLastName}`;
     }
 
-    return lastName;
+    return formattedLastName;
   }
 
-  return event.clientName || "Client non renseigné";
+  return firstName.trim() || fallbackName || "Client non renseigné";
 }
 
 function getContactDisplay(email: string, phone: string): string {
@@ -97,28 +80,30 @@ export function PaymentModal({
   onDelete,
   onValidate,
 }: PaymentModalProps) {
-  const initialService = getInitialService(existingPayment);
-  const clientDisplayName = getClientDisplayName(event);
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const contactDisplay = getContactDisplay(clientEmail, clientPhone);
+  const [clientFirstName, setClientFirstName] = useState(
+    getInitialClientFirstName(event, existingPayment),
+  );
+  const [clientLastName, setClientLastName] = useState(
+    getInitialClientLastName(event, existingPayment),
+  );
   const [amount, setAmount] = useState(
-    existingPayment?.amount.toString() ??
-      getServicePrice(initialService).toString(),
+    existingPayment?.amount.toString() ?? "",
   );
   const [method, setMethod] = useState<PaymentMethod>(
     getInitialPaymentMethod(existingPayment),
   );
-  const [service, setService] = useState<Service>(initialService);
 
   const parsedAmount = Number(amount);
   const canValidate =
     amount !== "" && Number.isInteger(parsedAmount) && parsedAmount > 0;
-
-  function selectService(serviceLabel: Service) {
-    setService(serviceLabel);
-    setAmount(getServicePrice(serviceLabel).toString());
-  }
+  const clientDisplayName = getClientDisplayName(
+    clientFirstName,
+    clientLastName,
+    existingPayment?.clientName ?? event.clientName,
+  );
 
   return (
     <div
@@ -177,27 +162,29 @@ export function PaymentModal({
           </dl>
 
           <div className="mt-4 flex flex-col gap-4">
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              Prestation
-              <select
-                className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-                onChange={(event) => selectService(event.target.value as Service)}
-                value={service}
-              >
-                {services.map((serviceOption) => (
-                  <option key={serviceOption.label} value={serviceOption.label}>
-                    {serviceOption.label} — {serviceOption.duration} —{" "}
-                    {serviceOption.price} €
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm font-normal text-zinc-600">
-                {
-                  services.find((serviceOption) => serviceOption.label === service)
-                    ?.description
-                }
-              </span>
-            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Nom
+                <input
+                  className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                  onChange={(event) => setClientLastName(event.target.value)}
+                  placeholder="Nom"
+                  type="text"
+                  value={clientLastName}
+                />
+              </label>
+
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Prénom
+                <input
+                  className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                  onChange={(event) => setClientFirstName(event.target.value)}
+                  placeholder="Prénom"
+                  type="text"
+                  value={clientFirstName}
+                />
+              </label>
+            </div>
 
             <label className="flex flex-col gap-2 text-sm font-medium">
               Montant
@@ -279,7 +266,12 @@ export function PaymentModal({
               className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
               disabled={!canValidate || isSaving || isDeleting}
               onClick={() =>
-                onValidate({ amount: parsedAmount, method, service })
+                onValidate({
+                  amount: parsedAmount,
+                  clientFirstName: clientFirstName.trim() || null,
+                  clientLastName: clientLastName.trim() || null,
+                  method,
+                })
               }
               type="button"
             >

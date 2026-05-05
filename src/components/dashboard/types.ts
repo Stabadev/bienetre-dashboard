@@ -5,8 +5,14 @@ export type Service = "Première séance" | "Séance d’entretien";
 export type SavedPayment = {
   id: string;
   appointmentUid: string;
+  calendlyEventUri: string | null;
+  calendlyInviteeUri: string | null;
   title: string;
+  clientFirstName: string | null;
+  clientLastName: string | null;
   clientName: string | null;
+  clientEmail: string | null;
+  clientPhone: string | null;
   service: string | null;
   startAt: string;
   endAt: string;
@@ -19,6 +25,7 @@ export type SavedPayment = {
 
 export type PaymentDraft = {
   amount: number;
+  clientFirstName: string | null;
+  clientLastName: string | null;
   method: PaymentMethod;
-  service: Service;
 };
