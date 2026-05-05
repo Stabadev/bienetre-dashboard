@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatCurrency, formatDate, formatTime } from "./formatters";
 import type { SavedPayment } from "./types";
 
@@ -74,6 +75,12 @@ export function PaymentsSidebar({ payments }: PaymentsSidebarProps) {
               {payment.service ? (
                 <p className="mt-1 text-sm text-zinc-600">{payment.service}</p>
               ) : null}
+              <Link
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+                href={`/dashboard/payments/${payment.id}/invoice`}
+              >
+                Facture
+              </Link>
             </li>
           ))}
         </ul>

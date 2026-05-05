@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 
 type RouteContext = {
   params: Promise<{
-    paymentId: string;
+    appointmentUid: string;
   }>;
 };
 
@@ -98,12 +98,12 @@ export async function GET(_request: Request, context: RouteContext) {
     return authResponse;
   }
 
-  const { paymentId } = await context.params;
-  const decodedPaymentId = decodeURIComponent(paymentId);
+  const { appointmentUid } = await context.params;
+  const decodedAppointmentUid = decodeURIComponent(appointmentUid);
 
   const invoice = await db.invoice.findUnique({
     where: {
-      paymentId: decodedPaymentId,
+      paymentId: decodedAppointmentUid,
     },
   });
 
@@ -113,7 +113,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const payment = await db.payment.findUnique({
     where: {
-      id: decodedPaymentId,
+      id: decodedAppointmentUid,
     },
   });
 
@@ -143,8 +143,8 @@ export async function POST(request: Request, context: RouteContext) {
     return authResponse;
   }
 
-  const { paymentId } = await context.params;
-  const decodedPaymentId = decodeURIComponent(paymentId);
+  const { appointmentUid } = await context.params;
+  const decodedAppointmentUid = decodeURIComponent(appointmentUid);
 
   let body: InvoicePayload;
 
@@ -158,7 +158,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const payment = await db.payment.findUnique({
     where: {
-      id: decodedPaymentId,
+      id: decodedAppointmentUid,
     },
     select: {
       id: true,
@@ -171,12 +171,12 @@ export async function POST(request: Request, context: RouteContext) {
 
   const invoice = await db.invoice.upsert({
     where: {
-      paymentId: decodedPaymentId,
+      paymentId: decodedAppointmentUid,
     },
     update: data,
     create: {
       ...data,
-      paymentId: decodedPaymentId,
+      paymentId: decodedAppointmentUid,
     },
   });
 

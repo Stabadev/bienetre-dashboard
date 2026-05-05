@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { CalendarEvent } from "@/lib/calendar";
 import { formatCurrency, formatDate, formatTime } from "./formatters";
 import type { SavedPayment } from "./types";
@@ -49,14 +50,12 @@ export function AppointmentCard({
   const service = getServiceLabel(event, payment);
 
   return (
-    <button
+    <article
       className={`w-full border-b px-3 py-3 text-left transition last:border-b-0 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 sm:px-4 ${
         isPaid
           ? "border-emerald-100 bg-emerald-50/40"
           : "border-amber-200 bg-white"
       }`}
-      onClick={() => onSelect(event)}
-      type="button"
     >
       <article className="grid gap-3 text-sm lg:grid-cols-[minmax(8.5rem,10rem)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(11rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,auto)] lg:items-center lg:gap-4">
         <div className="flex items-baseline gap-2 sm:block">
@@ -124,11 +123,23 @@ export function AppointmentCard({
           >
             {payment ? payment.method : "Paiement à renseigner"}
           </span>
-          <span className="text-xs font-semibold text-amber-700">
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-amber-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            onClick={() => onSelect(event)}
+            type="button"
+          >
             {payment ? "Modifier" : "Ajouter"}
-          </span>
+          </button>
+          {payment ? (
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+              href={`/dashboard/payments/${payment.id}/invoice`}
+            >
+              Facture
+            </Link>
+          ) : null}
         </div>
       </article>
-    </button>
+    </article>
   );
 }
