@@ -10,12 +10,26 @@ type AppointmentCardProps = {
   onSelect: (event: CalendarEvent) => void;
 };
 
-function getClientLastName(event: CalendarEvent): string {
-  return event.clientLastName ?? event.clientName ?? event.title;
+function getClientLastName(
+  event: CalendarEvent,
+  payment?: SavedPayment,
+): string {
+  return (
+    payment?.clientLastName ??
+    payment?.clientName ??
+    event.clientLastName ??
+    event.clientName ??
+    event.title
+  ).toLocaleUpperCase("fr-FR");
 }
 
-function getClientFirstName(event: CalendarEvent): string | null {
-  return event.clientFirstName;
+function getClientFirstName(
+  event: CalendarEvent,
+  payment?: SavedPayment,
+): string | null {
+  return (
+    payment?.clientFirstName ?? event.clientFirstName
+  )?.toLocaleUpperCase("fr-FR") ?? null;
 }
 
 function getServiceLabel(event: CalendarEvent, payment?: SavedPayment): string {
@@ -28,8 +42,8 @@ export function AppointmentCard({
   onSelect,
 }: AppointmentCardProps) {
   const isPaid = payment !== undefined;
-  const clientFirstName = getClientFirstName(event);
-  const clientLastName = getClientLastName(event);
+  const clientFirstName = getClientFirstName(event, payment);
+  const clientLastName = getClientLastName(event, payment);
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const service = getServiceLabel(event, payment);

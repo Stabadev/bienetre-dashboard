@@ -163,7 +163,7 @@ export function DashboardClient({ events }: DashboardClientProps) {
           clientName: getClientName(event, payment),
           clientEmail: event.clientEmail,
           clientPhone: event.clientPhone,
-          service: event.title,
+          service: payment.service,
           startAt: event.startAt,
           endAt: event.endAt,
           amount: payment.amount,

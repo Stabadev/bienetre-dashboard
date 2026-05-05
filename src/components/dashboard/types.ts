@@ -28,4 +28,5 @@ export type PaymentDraft = {
   clientFirstName: string | null;
   clientLastName: string | null;
   method: PaymentMethod;
+  service: string;
 };

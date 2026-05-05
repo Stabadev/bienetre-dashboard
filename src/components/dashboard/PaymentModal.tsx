@@ -11,6 +11,26 @@ import type {
 
 const paymentMethods: PaymentMethod[] = ["espèces", "chèque", "virement"];
 
+const services: Array<{
+  label: string;
+  duration: string;
+  description: string;
+  price: number;
+}> = [
+  {
+    label: "Première séance",
+    duration: "1h20",
+    description: "discussion, bilan énergétique, soin et conseils personnalisés",
+    price: 75,
+  },
+  {
+    label: "Séance de suite des soins",
+    duration: "50min",
+    description: "soins et suite de conseils",
+    price: 60,
+  },
+];
+
 function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod {
   return (
     paymentMethods.find(
@@ -19,22 +39,90 @@ function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod 
   );
 }
 
+function getMatchingServiceLabel(serviceLabel: string): string | null {
+  const normalizedService = serviceLabel.toLocaleLowerCase("fr-FR");
+
+  if (normalizedService.includes("prem")) {
+    return services[0].label;
+  }
+
+  if (
+    normalizedService.includes("suite") ||
+    normalizedService.includes("entretien") ||
+    normalizedService.includes("suivi")
+  ) {
+    return services[1].label;
+  }
+
+  return null;
+}
+
+function getInitialService(
+  event: CalendarEvent,
+  existingPayment?: SavedPayment,
+): string {
+  return (
+    existingPayment?.service ??
+    getMatchingServiceLabel(event.title) ??
+    event.title ??
+    services[0].label
+  );
+}
+
+function getDefaultAmountFromService(serviceLabel: string): string {
+  const matchingService = services.find(
+    (service) => service.label === getMatchingServiceLabel(serviceLabel),
+  );
+
+  return matchingService ? matchingService.price.toString() : "";
+}
+
+function getInitialAmount(
+  serviceLabel: string,
+  existingPayment?: SavedPayment,
+): string {
+  return (
+    existingPayment?.amount.toString() ?? getDefaultAmountFromService(serviceLabel)
+  );
+}
+
+function getServiceOptions(serviceLabel: string) {
+  if (services.some((service) => service.label === serviceLabel)) {
+    return services;
+  }
+
+  return [
+    {
+      label: serviceLabel,
+      duration: "",
+      description: "prestation issue du rendez-vous Calendly",
+      price: 0,
+    },
+    ...services,
+  ];
+}
+
 function getInitialClientFirstName(
   event: CalendarEvent,
   existingPayment?: SavedPayment,
 ): string {
-  return existingPayment?.clientFirstName ?? event.clientFirstName ?? "";
+  return (
+    existingPayment?.clientFirstName ??
+    event.clientFirstName ??
+    ""
+  ).toLocaleUpperCase("fr-FR");
 }
 
 function getInitialClientLastName(
   event: CalendarEvent,
   existingPayment?: SavedPayment,
 ): string {
-  return existingPayment?.clientLastName ?? event.clientLastName ?? "";
-}
-
-function capitalizeFirstLetter(value: string): string {
-  return value.charAt(0).toLocaleUpperCase("fr-FR") + value.slice(1);
+  return (
+    existingPayment?.clientLastName ??
+    event.clientLastName ??
+    event.clientName ??
+    ""
+  ).toLocaleUpperCase("fr-FR");
 }
 
 function getClientDisplayName(
@@ -46,17 +134,36 @@ function getClientDisplayName(
     const formattedLastName = lastName.trim().toLocaleUpperCase("fr-FR");
 
     if (firstName.trim()) {
-      return `${capitalizeFirstLetter(firstName.trim())} ${formattedLastName}`;
+      return `${firstName
+        .trim()
+        .toLocaleUpperCase("fr-FR")} ${formattedLastName}`;
     }
 
     return formattedLastName;
   }
 
-  return firstName.trim() || fallbackName || "Client non renseigné";
+  return (
+    firstName.trim().toLocaleUpperCase("fr-FR") ||
+    fallbackName?.toLocaleUpperCase("fr-FR") ||
+    "Client non renseigné"
+  );
 }
 
 function getContactDisplay(email: string, phone: string): string {
   return `${email} • ${phone}`;
+}
+
+function shouldVerifyClientName(
+  event: CalendarEvent,
+  existingPayment?: SavedPayment,
+): boolean {
+  if (existingPayment?.clientFirstName) {
+    return false;
+  }
+
+  return (
+    !event.clientFirstName && Boolean(event.clientLastName ?? event.clientName)
+  );
 }
 
 type PaymentModalProps = {
@@ -83,14 +190,17 @@ export function PaymentModal({
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const contactDisplay = getContactDisplay(clientEmail, clientPhone);
+  const initialService = getInitialService(event, existingPayment);
+  const mustVerifyClientName = shouldVerifyClientName(event, existingPayment);
   const [clientFirstName, setClientFirstName] = useState(
     getInitialClientFirstName(event, existingPayment),
   );
   const [clientLastName, setClientLastName] = useState(
     getInitialClientLastName(event, existingPayment),
   );
+  const [service, setService] = useState(initialService);
   const [amount, setAmount] = useState(
-    existingPayment?.amount.toString() ?? "",
+    getInitialAmount(initialService, existingPayment),
   );
   const [method, setMethod] = useState<PaymentMethod>(
     getInitialPaymentMethod(existingPayment),
@@ -104,6 +214,12 @@ export function PaymentModal({
     clientLastName,
     existingPayment?.clientName ?? event.clientName,
   );
+  const serviceOptions = getServiceOptions(service);
+
+  function selectService(serviceLabel: string) {
+    setService(serviceLabel);
+    setAmount(getDefaultAmountFromService(serviceLabel));
+  }
 
   return (
     <div
@@ -150,7 +266,7 @@ export function PaymentModal({
             </div>
             <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
               <dt className="font-medium text-zinc-500">Prestation</dt>
-              <dd className="font-medium text-zinc-800">{event.title}</dd>
+              <dd className="font-medium text-zinc-800">{service}</dd>
             </div>
             <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
               <dt className="font-medium text-zinc-500">Date</dt>
@@ -164,27 +280,64 @@ export function PaymentModal({
           <div className="mt-4 flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-2 text-sm font-medium">
-                Nom
-                <input
-                  className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-                  onChange={(event) => setClientLastName(event.target.value)}
-                  placeholder="Nom"
-                  type="text"
-                  value={clientLastName}
-                />
-              </label>
-
-              <label className="flex flex-col gap-2 text-sm font-medium">
                 Prénom
                 <input
                   className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-                  onChange={(event) => setClientFirstName(event.target.value)}
+                  onChange={(event) =>
+                    setClientFirstName(
+                      event.target.value.toLocaleUpperCase("fr-FR"),
+                    )
+                  }
                   placeholder="Prénom"
                   type="text"
                   value={clientFirstName}
                 />
               </label>
+
+              <label className="flex flex-col gap-2 text-sm font-medium">
+                Nom
+                <input
+                  className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                  onChange={(event) =>
+                    setClientLastName(
+                      event.target.value.toLocaleUpperCase("fr-FR"),
+                    )
+                  }
+                  placeholder="Nom"
+                  type="text"
+                  value={clientLastName}
+                />
+              </label>
             </div>
+
+            {mustVerifyClientName ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                Nom/prénom à vérifier
+              </p>
+            ) : null}
+
+            <label className="flex flex-col gap-2 text-sm font-medium">
+              Prestation
+              <select
+                className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                onChange={(event) => selectService(event.target.value)}
+                value={service}
+              >
+                {serviceOptions.map((serviceOption) => (
+                  <option key={serviceOption.label} value={serviceOption.label}>
+                    {serviceOption.duration
+                      ? `${serviceOption.label} - ${serviceOption.duration} - ${serviceOption.price} €`
+                      : serviceOption.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-sm font-normal text-zinc-600">
+                {
+                  serviceOptions.find((serviceOption) => serviceOption.label === service)
+                    ?.description
+                }
+              </span>
+            </label>
 
             <label className="flex flex-col gap-2 text-sm font-medium">
               Montant
@@ -271,6 +424,7 @@ export function PaymentModal({
                   clientFirstName: clientFirstName.trim() || null,
                   clientLastName: clientLastName.trim() || null,
                   method,
+                  service,
                 })
               }
               type="button"
