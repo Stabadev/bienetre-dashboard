@@ -10,12 +10,29 @@ type AppointmentCardProps = {
   onSelect: (event: CalendarEvent) => void;
 };
 
+function getClientLastName(event: CalendarEvent): string {
+  return event.clientLastName ?? event.clientName ?? event.title;
+}
+
+function getClientFirstName(event: CalendarEvent): string | null {
+  return event.clientFirstName;
+}
+
+function getServiceLabel(event: CalendarEvent, payment?: SavedPayment): string {
+  return payment?.service ?? event.title ?? "Prestation à préciser";
+}
+
 export function AppointmentCard({
   event,
   payment,
   onSelect,
 }: AppointmentCardProps) {
   const isPaid = payment !== undefined;
+  const clientFirstName = getClientFirstName(event);
+  const clientLastName = getClientLastName(event);
+  const clientEmail = event.clientEmail ?? "Email non renseigné";
+  const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
+  const service = getServiceLabel(event, payment);
 
   return (
     <button
@@ -27,7 +44,7 @@ export function AppointmentCard({
       onClick={() => onSelect(event)}
       type="button"
     >
-      <article className="grid gap-2 text-sm sm:grid-cols-[minmax(8.5rem,11rem)_minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(5.5rem,auto)_minmax(8rem,auto)] sm:items-center sm:gap-4">
+      <article className="grid gap-3 text-sm lg:grid-cols-[minmax(8.5rem,10rem)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(11rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,auto)] lg:items-center lg:gap-4">
         <div className="flex items-baseline gap-2 sm:block">
           <p className="font-semibold text-zinc-950">
             {formatTime(event.startAt)}
@@ -42,27 +59,44 @@ export function AppointmentCard({
         </div>
 
         <div className="min-w-0">
-          <h3 className="truncate font-semibold text-zinc-950">
-            {event.title}
-          </h3>
-          <p className="mt-0.5 truncate text-xs text-zinc-500 sm:hidden">
-            {payment?.service ?? "Prestation à préciser"}
-          </p>
+          <p className="text-xs font-medium text-zinc-500">Nom</p>
+          <p className="truncate font-semibold text-zinc-950">{clientLastName}</p>
         </div>
 
-        <p className="hidden min-w-0 truncate text-zinc-600 sm:block">
-          {payment?.service ?? "Prestation à préciser"}
-        </p>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">Prénom</p>
+          {clientFirstName ? (
+            <p className="truncate font-medium text-zinc-800">
+              {clientFirstName}
+            </p>
+          ) : (
+            <p className="text-zinc-400">-</p>
+          )}
+        </div>
 
-        <p
-          className={`font-semibold ${
-            isPaid ? "text-emerald-800" : "text-amber-800"
-          }`}
-        >
-          {payment ? formatCurrency(payment.amount) : "A saisir"}
-        </p>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">Téléphone</p>
+          <p className="truncate font-medium text-zinc-800">{clientPhone}</p>
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">Email</p>
+          <p className="truncate font-medium text-zinc-800">{clientEmail}</p>
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">Prestation</p>
+          <p className="truncate font-medium text-zinc-800">{service}</p>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <span
+            className={`font-semibold ${
+              isPaid ? "text-emerald-800" : "text-amber-800"
+            }`}
+          >
+            {payment ? formatCurrency(payment.amount) : "A saisir"}
+          </span>
           <span
             aria-label={
               isPaid ? "Paiement renseigné" : "Paiement non renseigné"
