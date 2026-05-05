@@ -8,28 +8,41 @@ import { isAuthenticated } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{
+    refresh?: string;
+  }>;
+};
+
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   if (!(await isAuthenticated())) {
     redirect("/login");
   }
 
-  const result = await loadEvents();
+  const { refresh } = await searchParams;
+  const result = await loadEvents(Boolean(refresh));
 
   if (!result.ok) {
     return <DashboardError message={result.message} />;
   }
 
-  return <Dashboard events={result.events} />;
+  return <Dashboard events={result.events} lastFetchedAt={result.lastFetchedAt} />;
 }
 
-async function loadEvents(): Promise<
-  | { ok: true; events: CalendarEvent[] }
+async function loadEvents(forceRefresh: boolean): Promise<
+  | { ok: true; events: CalendarEvent[]; lastFetchedAt: string }
   | { ok: false; message: string }
 > {
   try {
-    const events = await getCalendarEvents();
+    const result = await getCalendarEvents({ forceRefresh });
 
-    return { ok: true, events };
+    return {
+      ok: true,
+      events: result.events,
+      lastFetchedAt: result.lastFetchedAt,
+    };
   } catch (error) {
     return {
       ok: false,
@@ -41,7 +54,13 @@ async function loadEvents(): Promise<
   }
 }
 
-function Dashboard({ events }: { events: CalendarEvent[] }) {
+function Dashboard({
+  events,
+  lastFetchedAt,
+}: {
+  events: CalendarEvent[];
+  lastFetchedAt: string;
+}) {
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -82,7 +101,7 @@ function Dashboard({ events }: { events: CalendarEvent[] }) {
           </div>
         </header>
 
-        <DashboardClient events={events} />
+        <DashboardClient events={events} lastFetchedAt={lastFetchedAt} />
       </section>
     </main>
   );

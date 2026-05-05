@@ -20,6 +20,11 @@ export type CalendarEvent = {
   updatedAt: string | null;
 };
 
+export type CalendarEventsResult = {
+  events: CalendarEvent[];
+  lastFetchedAt: string;
+};
+
 export class CalendarError extends Error {
   constructor(message: string) {
     super(message);
@@ -68,6 +73,7 @@ type CalendlyInvitee = {
 type CalendarEventsCache = {
   events: CalendarEvent[];
   expiresAt: number;
+  fetchedAt: number;
 };
 
 let calendarEventsCache: CalendarEventsCache | null = null;
@@ -277,27 +283,46 @@ async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
   );
 }
 
-export async function getCalendarEvents(): Promise<CalendarEvent[]> {
+export async function getCalendarEvents({
+  forceRefresh = false,
+}: {
+  forceRefresh?: boolean;
+} = {}): Promise<CalendarEventsResult> {
   const now = Date.now();
 
-  if (calendarEventsCache && calendarEventsCache.expiresAt > now) {
-    return calendarEventsCache.events;
+  if (
+    !forceRefresh &&
+    calendarEventsCache &&
+    calendarEventsCache.expiresAt > now
+  ) {
+    return {
+      events: calendarEventsCache.events,
+      lastFetchedAt: new Date(calendarEventsCache.fetchedAt).toISOString(),
+    };
   }
 
   try {
     const events = await fetchCalendarEventsFromCalendly();
+    const fetchedAt = Date.now();
 
     // Cache volontairement court pour limiter les appels Calendly sans masquer
     // longtemps les changements de planning.
     calendarEventsCache = {
       events,
-      expiresAt: now + CALENDAR_CACHE_DURATION_MS,
+      expiresAt: fetchedAt + CALENDAR_CACHE_DURATION_MS,
+      fetchedAt,
     };
 
-    return events;
+    return {
+      events,
+      lastFetchedAt: new Date(fetchedAt).toISOString(),
+    };
   } catch (error) {
     if (calendarEventsCache) {
-      return calendarEventsCache.events;
+      return {
+        events: calendarEventsCache.events,
+        lastFetchedAt: new Date(calendarEventsCache.fetchedAt).toISOString(),
+      };
     }
 
     throw error;

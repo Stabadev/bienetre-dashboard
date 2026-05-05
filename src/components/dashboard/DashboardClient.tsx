@@ -9,6 +9,7 @@ import type { PaymentDraft, SavedPayment } from "./types";
 
 type DashboardClientProps = {
   events: CalendarEvent[];
+  lastFetchedAt: string;
 };
 
 type SectionKey = "overdue" | "today" | "paid" | "upcoming";
@@ -59,6 +60,16 @@ function isDateInCurrentWeek(value: string): boolean {
   );
 }
 
+function getMinutesSince(value: string): number {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
+}
+
 function getClientName(event: CalendarEvent, payment: PaymentDraft): string {
   const fullName = [payment.clientLastName, payment.clientFirstName]
     .filter(Boolean)
@@ -75,7 +86,10 @@ async function readErrorMessage(response: Response): Promise<string> {
   return payload?.error ?? "La requête a échoué.";
 }
 
-export function DashboardClient({ events }: DashboardClientProps) {
+export function DashboardClient({
+  events,
+  lastFetchedAt,
+}: DashboardClientProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [paymentsByEventKey, setPaymentsByEventKey] = useState<
     Record<string, SavedPayment>
@@ -316,6 +330,8 @@ export function DashboardClient({ events }: DashboardClientProps) {
           weeklyAmount={weeklyAmount}
         />
 
+        <CalendarFreshness lastFetchedAt={lastFetchedAt} />
+
         <DashboardStatus
           isLoading={isLoadingPayments}
           message={paymentsLoadError}
@@ -462,6 +478,41 @@ function SummaryCards({
           </p>
         </article>
       ))}
+    </section>
+  );
+}
+
+function CalendarFreshness({ lastFetchedAt }: { lastFetchedAt: string }) {
+  const minutesSinceRefresh = getMinutesSince(lastFetchedAt);
+  const isPossiblyStale = minutesSinceRefresh >= 5;
+
+  function refreshCalendar() {
+    window.location.href = `/dashboard?refresh=${Date.now()}`;
+  }
+
+  return (
+    <section
+      className={`flex flex-col gap-3 rounded-3xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+        isPossiblyStale
+          ? "border-zinc-200 bg-white/60 text-zinc-600"
+          : "border-emerald-100 bg-emerald-50/80 text-emerald-950"
+      }`}
+    >
+      <div>
+        <p className="text-sm font-semibold">
+          Mis à jour il y a {minutesSinceRefresh} min
+        </p>
+        {isPossiblyStale ? (
+          <p className="mt-1 text-sm">Données possiblement obsolètes</p>
+        ) : null}
+      </div>
+      <button
+        className="inline-flex h-10 w-fit items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300"
+        onClick={refreshCalendar}
+        type="button"
+      >
+        Rafraîchir
+      </button>
     </section>
   );
 }
