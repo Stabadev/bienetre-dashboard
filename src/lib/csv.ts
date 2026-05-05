@@ -27,7 +27,10 @@ const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
 });
 
 function escapeCsvValue(value: string | number): string {
-  const stringValue = String(value);
+  const rawStringValue = String(value);
+  const stringValue = /^[=+\-@\t]/.test(rawStringValue)
+    ? `'${rawStringValue}`
+    : rawStringValue;
 
   if (
     stringValue.includes(";") ||
