@@ -1,4 +1,5 @@
 const CALENDLY_API_BASE_URL = "https://api.calendly.com";
+const CALENDAR_CACHE_DURATION_MS = 5 * 60 * 1000;
 
 export type CalendarEvent = {
   uid: string;
@@ -63,6 +64,13 @@ type CalendlyInvitee = {
   text_reminder_number?: unknown;
   status?: unknown;
 };
+
+type CalendarEventsCache = {
+  events: CalendarEvent[];
+  expiresAt: number;
+};
+
+let calendarEventsCache: CalendarEventsCache | null = null;
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -236,7 +244,7 @@ function simplifyCalendlyEvent(
   };
 }
 
-export async function getCalendarEvents(): Promise<CalendarEvent[]> {
+async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
   const calendlyToken = process.env.CALENDLY_TOKEN;
 
   if (!calendlyToken) {
@@ -267,4 +275,31 @@ export async function getCalendarEvents(): Promise<CalendarEvent[]> {
     (eventA, eventB) =>
       new Date(eventA.startAt).getTime() - new Date(eventB.startAt).getTime(),
   );
+}
+
+export async function getCalendarEvents(): Promise<CalendarEvent[]> {
+  const now = Date.now();
+
+  if (calendarEventsCache && calendarEventsCache.expiresAt > now) {
+    return calendarEventsCache.events;
+  }
+
+  try {
+    const events = await fetchCalendarEventsFromCalendly();
+
+    // Cache volontairement court pour limiter les appels Calendly sans masquer
+    // longtemps les changements de planning.
+    calendarEventsCache = {
+      events,
+      expiresAt: now + CALENDAR_CACHE_DURATION_MS,
+    };
+
+    return events;
+  } catch (error) {
+    if (calendarEventsCache) {
+      return calendarEventsCache.events;
+    }
+
+    throw error;
+  }
 }
