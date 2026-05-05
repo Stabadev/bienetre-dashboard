@@ -54,6 +54,28 @@ function getInitialPaymentMethod(existingPayment?: SavedPayment): PaymentMethod 
   );
 }
 
+function capitalizeFirstLetter(value: string): string {
+  return value.charAt(0).toLocaleUpperCase("fr-FR") + value.slice(1);
+}
+
+function getClientDisplayName(event: CalendarEvent): string {
+  if (event.clientLastName) {
+    const lastName = event.clientLastName.toLocaleUpperCase("fr-FR");
+
+    if (event.clientFirstName) {
+      return `${capitalizeFirstLetter(event.clientFirstName)} ${lastName}`;
+    }
+
+    return lastName;
+  }
+
+  return event.clientName || "Client non renseigné";
+}
+
+function getContactDisplay(email: string, phone: string): string {
+  return `${email} • ${phone}`;
+}
+
 type PaymentModalProps = {
   event: CalendarEvent;
   existingPayment?: SavedPayment;
@@ -76,6 +98,10 @@ export function PaymentModal({
   onValidate,
 }: PaymentModalProps) {
   const initialService = getInitialService(existingPayment);
+  const clientDisplayName = getClientDisplayName(event);
+  const clientEmail = event.clientEmail ?? "Email non renseigné";
+  const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
+  const contactDisplay = getContactDisplay(clientEmail, clientPhone);
   const [amount, setAmount] = useState(
     existingPayment?.amount.toString() ??
       getServicePrice(initialService).toString(),
@@ -123,29 +149,34 @@ export function PaymentModal({
           </div>
         </div>
 
-        <div className="overflow-y-auto px-5 py-5">
-          <dl className="grid gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-4 text-sm sm:grid-cols-3">
-            <div className="sm:col-span-3">
-              <dt className="text-zinc-500">Client</dt>
-              <dd className="mt-1 text-base font-semibold text-zinc-950">
-                {event.title}
+        <div className="overflow-y-auto px-5 py-4">
+          <dl className="grid gap-2 rounded-xl border border-amber-100 bg-amber-50/60 p-3 text-sm">
+            <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
+              <dt className="font-medium text-zinc-500">Client</dt>
+              <dd className="font-semibold text-zinc-950">
+                {clientDisplayName}
               </dd>
             </div>
-            <div className="sm:col-span-3">
-              <dt className="text-zinc-500">Date</dt>
-              <dd className="mt-1 font-medium">{formatDate(event.startAt)}</dd>
+            <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
+              <dt className="font-medium text-zinc-500">Contact</dt>
+              <dd className="break-words font-medium text-zinc-800">
+                {contactDisplay}
+              </dd>
             </div>
-            <div>
-              <dt className="text-zinc-500">Début</dt>
-              <dd className="mt-1 font-medium">{formatTime(event.startAt)}</dd>
+            <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
+              <dt className="font-medium text-zinc-500">Prestation</dt>
+              <dd className="font-medium text-zinc-800">{event.title}</dd>
             </div>
-            <div>
-              <dt className="text-zinc-500">Fin</dt>
-              <dd className="mt-1 font-medium">{formatTime(event.endAt)}</dd>
+            <div className="grid gap-0.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
+              <dt className="font-medium text-zinc-500">Date</dt>
+              <dd className="font-medium text-zinc-800">
+                {formatDate(event.startAt)} • {formatTime(event.startAt)} -{" "}
+                {formatTime(event.endAt)}
+              </dd>
             </div>
           </dl>
 
-          <div className="mt-5 flex flex-col gap-5">
+          <div className="mt-4 flex flex-col gap-4">
             <label className="flex flex-col gap-2 text-sm font-medium">
               Prestation
               <select

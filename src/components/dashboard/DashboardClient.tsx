@@ -27,6 +27,14 @@ function sortEventsByStartAt(eventA: CalendarEvent, eventB: CalendarEvent) {
   return new Date(eventA.startAt).getTime() - new Date(eventB.startAt).getTime();
 }
 
+function getClientName(event: CalendarEvent): string {
+  const fullName = [event.clientLastName, event.clientFirstName]
+    .filter(Boolean)
+    .join(" ");
+
+  return fullName || event.clientName || event.title;
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => null)) as {
     error?: string;
@@ -148,7 +156,9 @@ export function DashboardClient({ events }: DashboardClientProps) {
         body: JSON.stringify({
           appointmentUid: getEventKey(event),
           title: event.title,
-          clientName: event.title,
+          clientName: getClientName(event),
+          email: event.clientEmail,
+          phone: event.clientPhone,
           service: payment.service,
           startAt: event.startAt,
           endAt: event.endAt,
