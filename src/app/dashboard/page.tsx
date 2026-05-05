@@ -55,7 +55,7 @@ function Dashboard({ events }: { events: CalendarEvent[] }) {
                 Tableau de bord
               </h1>
               <p className="mt-2 text-zinc-600">
-                Rendez-vous importés depuis Google Calendar
+                Rendez-vous importés depuis Calendly
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">

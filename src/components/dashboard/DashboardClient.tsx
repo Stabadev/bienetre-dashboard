@@ -182,7 +182,7 @@ export function DashboardClient({ events }: DashboardClientProps) {
   async function deletePayment(event: CalendarEvent) {
     const appointmentUid = getEventKey(event);
     const confirmed = window.confirm(
-      "Supprimer ce paiement ? Le rendez-vous Google Calendar sera conservé.",
+      "Supprimer ce paiement ? Le rendez-vous Calendly sera conservé.",
     );
 
     if (!confirmed) {
