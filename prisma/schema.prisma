@@ -23,6 +23,44 @@ model Payment {
   amount             Int
   method             String
   paidAt             DateTime @default(now())
+  invoice            Invoice?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model Invoice {
+  id String @id @default(cuid())
+
+  paymentId String  @unique
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  number    String
+  issueDate DateTime
+
+  sellerName    String
+  sellerAddress String
+  sellerSiret   String
+  sellerPhone   String?
+  sellerEmail   String?
+
+  clientFirstName String
+  clientLastName  String
+  clientName      String
+  clientEmail     String?
+  clientPhone     String?
+
+  service     String
+  serviceDate DateTime
+  amount      Int
+  method      String
+
+  vatMention String @default("TVA non applicable, art. 293 B du CGI")
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([number])
+  @@index([issueDate])
 }
