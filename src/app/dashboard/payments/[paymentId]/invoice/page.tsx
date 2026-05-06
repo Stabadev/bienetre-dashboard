@@ -70,6 +70,22 @@ function buildClientName(firstName: string, lastName: string, fallback: string) 
   return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || fallback;
 }
 
+function splitClientName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length <= 1) {
+    return {
+      clientFirstName: "",
+      clientLastName: parts[0] ?? "",
+    };
+  }
+
+  return {
+    clientFirstName: parts.slice(0, -1).join(" "),
+    clientLastName: parts.at(-1) ?? "",
+  };
+}
+
 function buildInvoiceForm(invoice: InvoiceResponse, number: string): InvoiceForm {
   return {
     number,
@@ -185,13 +201,27 @@ export default function InvoicePage() {
     setSuccessMessage(undefined);
   }
 
+  function updateClientName(value: string) {
+    const { clientFirstName, clientLastName } = splitClientName(value);
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      clientFirstName,
+      clientLastName,
+      clientName: value,
+    }));
+    setSuccessMessage(undefined);
+  }
+
   async function persistInvoice() {
     const currentForm = form;
-    const clientName = buildClientName(
-      currentForm.clientFirstName,
-      currentForm.clientLastName,
-      currentForm.clientName,
-    );
+    const clientName =
+      currentForm.clientName.trim() ||
+      buildClientName(
+        currentForm.clientFirstName,
+        currentForm.clientLastName,
+        currentForm.clientName,
+      );
     const response = await fetch(
       `/api/payments/${encodeURIComponent(paymentId)}/invoice`,
       {
@@ -370,57 +400,73 @@ export default function InvoicePage() {
                   isLocked ? "opacity-60" : ""
                 }`}
               >
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Numéro facture"
-                  onChange={(value) => updateField("number", value)}
-                  value={form.number}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Date facture"
-                  onChange={(value) => updateField("issueDate", value)}
-                  type="date"
-                  value={form.issueDate}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Prénom client"
-                  onChange={(value) => updateField("clientFirstName", value)}
-                  value={form.clientFirstName}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Nom client"
-                  onChange={(value) => updateField("clientLastName", value)}
-                  value={form.clientLastName}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Prestation"
-                  onChange={(value) => updateField("service", value)}
-                  value={form.service}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Date du soin"
-                  onChange={(value) => updateField("serviceDate", value)}
-                  type="date"
-                  value={form.serviceDate}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Montant"
-                  onChange={(value) => updateField("amount", value)}
-                  type="number"
-                  value={form.amount}
-                />
-                <TextField
-                  disabled={areFieldsDisabled}
-                  label="Mode de paiement"
-                  onChange={(value) => updateField("method", value)}
-                  value={form.method}
-                />
+                <div className="sm:col-span-2">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Facture
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Numéro facture"
+                      onChange={(value) => updateField("number", value)}
+                      value={form.number}
+                    />
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Date facture"
+                      onChange={(value) => updateField("issueDate", value)}
+                      type="date"
+                      value={form.issueDate}
+                    />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Prestation
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Client"
+                      onChange={updateClientName}
+                      value={
+                        form.clientName ||
+                        buildClientName(
+                          form.clientFirstName,
+                          form.clientLastName,
+                          "",
+                        )
+                      }
+                    />
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Prestation"
+                      onChange={(value) => updateField("service", value)}
+                      value={form.service}
+                    />
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Date du soin"
+                      onChange={(value) => updateField("serviceDate", value)}
+                      type="date"
+                      value={form.serviceDate}
+                    />
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Montant"
+                      onChange={(value) => updateField("amount", value)}
+                      type="number"
+                      value={form.amount}
+                    />
+                    <TextField
+                      disabled={areFieldsDisabled}
+                      label="Mode de paiement"
+                      onChange={(value) => updateField("method", value)}
+                      value={form.method}
+                    />
+                  </div>
+                </div>
               </div>
 
               <label
@@ -474,7 +520,7 @@ export default function InvoicePage() {
                       onClick={editInvoice}
                       type="button"
                     >
-                      Modifier la facture
+                      Déverrouiller
                     </button>
                     <button
                       className="inline-flex h-12 items-center justify-center rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700"
@@ -493,13 +539,6 @@ export default function InvoicePage() {
                       type="button"
                     >
                       {isOpeningPdf ? "Ouverture..." : "Ouvrir le PDF"}
-                    </button>
-                    <button
-                      className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-                      disabled={isActionDisabled}
-                      type="submit"
-                    >
-                      {isSaving ? "Enregistrement..." : "Enregistrer"}
                     </button>
                   </>
                 )}
