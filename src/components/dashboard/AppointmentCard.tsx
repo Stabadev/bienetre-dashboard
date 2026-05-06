@@ -81,39 +81,33 @@ export function AppointmentCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <span
-            className={`font-semibold ${
-              isPaid ? "text-emerald-800" : "text-amber-800"
-            }`}
-          >
-            {payment ? formatCurrency(payment.amount) : "A saisir"}
-          </span>
-          <span
-            aria-label={
-              isPaid ? "Paiement renseigné" : "Paiement non renseigné"
-            }
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-              isPaid
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-800"
-            }`}
-            title={isPaid ? "Paiement renseigné" : "Paiement non renseigné"}
-          >
-            {payment ? payment.method : "Paiement à renseigner"}
-          </span>
+          {payment ? (
+            <>
+              <span className="font-semibold text-emerald-800">
+                {formatCurrency(payment.amount)}
+              </span>
+              <span
+                aria-label="Paiement renseigné"
+                className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800"
+                title="Paiement renseigné"
+              >
+                {payment.method}
+              </span>
+            </>
+          ) : null}
           <button
             className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-amber-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
             onClick={() => onSelect(event)}
             type="button"
           >
-            {payment ? "Modifier" : "Ajouter"}
+            {payment ? "Modifier le paiement" : "Enregistrer le paiement"}
           </button>
           {payment ? (
             <Link
               className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
               href={`/dashboard/payments/${payment.id}/invoice`}
             >
-              Facture
+              {payment.hasInvoice ? "Voir la facture" : "Créer la facture"}
             </Link>
           ) : null}
         </div>

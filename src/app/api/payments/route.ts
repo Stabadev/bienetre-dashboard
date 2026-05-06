@@ -40,14 +40,20 @@ function serializePayment(payment: {
   paidAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  invoice?: {
+    id: string;
+  } | null;
 }) {
+  const { invoice, ...serializedPayment } = payment;
+
   return {
-    ...payment,
+    ...serializedPayment,
     startAt: payment.startAt.toISOString(),
     endAt: payment.endAt.toISOString(),
     paidAt: payment.paidAt.toISOString(),
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
+    hasInvoice: invoice !== undefined && invoice !== null,
   };
 }
 
@@ -85,6 +91,13 @@ export async function GET() {
   }
 
   const payments = await db.payment.findMany({
+    include: {
+      invoice: {
+        select: {
+          id: true,
+        },
+      },
+    },
     orderBy: {
       startAt: "asc",
     },
@@ -177,6 +190,13 @@ export async function POST(request: Request) {
         amount,
         method,
         paidAt: new Date(),
+      },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+          },
+        },
       },
     });
   } catch {

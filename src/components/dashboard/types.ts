@@ -19,6 +19,7 @@ export type SavedPayment = {
   amount: number;
   method: string;
   paidAt: string;
+  hasInvoice: boolean;
   createdAt: string;
   updatedAt: string;
 };
