@@ -102,10 +102,12 @@ export default function InvoicePage() {
   const [hasExistingInvoice, setHasExistingInvoice] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
   const hasUnsavedChanges =
     JSON.stringify(form) !== JSON.stringify(savedForm);
+  const isActionDisabled = isSaving || isOpeningPdf;
 
   useEffect(() => {
     let isMounted = true;
@@ -180,65 +182,75 @@ export default function InvoicePage() {
     setSuccessMessage(undefined);
   }
 
+  async function persistInvoice() {
+    const currentForm = form;
+    const clientName = buildClientName(
+      currentForm.clientFirstName,
+      currentForm.clientLastName,
+      currentForm.clientName,
+    );
+    const response = await fetch(
+      `/api/payments/${encodeURIComponent(paymentId)}/invoice`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          number: currentForm.number,
+          issueDate: currentForm.issueDate,
+          sellerName: "Julie Surrel",
+          sellerAddress: "253 rue Emmanuel Mauras, 43260 St Julien Chapteuil",
+          sellerSiret: "495 046 021 000 46",
+          sellerPhone: "06 60 05 36 70",
+          sellerEmail: "bienetre.des.sagesses@gmail.com",
+          clientFirstName: currentForm.clientFirstName,
+          clientLastName: currentForm.clientLastName,
+          clientName,
+          clientEmail: null,
+          clientPhone: null,
+          service: currentForm.service,
+          serviceDate: currentForm.serviceDate,
+          amount: Number(currentForm.amount),
+          method: currentForm.method,
+          notes: currentForm.notes || null,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    const savedInvoice = (await response.json()) as InvoiceResponse;
+    const savedFormFromResponse = {
+      ...currentForm,
+      number: savedInvoice.number ?? currentForm.number,
+      issueDate: toDateInputValue(savedInvoice.issueDate),
+      serviceDate: toDateInputValue(savedInvoice.serviceDate),
+      clientName: savedInvoice.clientName ?? clientName,
+      amount: savedInvoice.amount.toString(),
+    };
+
+    setForm(savedFormFromResponse);
+    setSavedForm(savedFormFromResponse);
+    setHasExistingInvoice(Boolean(savedInvoice.id));
+    setInvoiceCreatedAt(savedInvoice.createdAt ?? null);
+  }
+
   async function saveInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isActionDisabled) {
+      return;
+    }
+
     setIsSaving(true);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
 
     try {
-      const clientName = buildClientName(
-        form.clientFirstName,
-        form.clientLastName,
-        form.clientName,
-      );
-      const response = await fetch(
-        `/api/payments/${encodeURIComponent(paymentId)}/invoice`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            number: form.number,
-            issueDate: form.issueDate,
-            sellerName: "Julie Surrel",
-            sellerAddress: "253 rue Emmanuel Mauras, 43260 St Julien Chapteuil",
-            sellerSiret: "495 046 021 000 46",
-            sellerPhone: "06 60 05 36 70",
-            sellerEmail: "bienetre.des.sagesses@gmail.com",
-            clientFirstName: form.clientFirstName,
-            clientLastName: form.clientLastName,
-            clientName,
-            clientEmail: null,
-            clientPhone: null,
-            service: form.service,
-            serviceDate: form.serviceDate,
-            amount: Number(form.amount),
-            method: form.method,
-            notes: form.notes || null,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-      }
-
-      const savedInvoice = (await response.json()) as InvoiceResponse;
-      const savedFormFromResponse = {
-        ...form,
-        number: savedInvoice.number ?? form.number,
-        issueDate: toDateInputValue(savedInvoice.issueDate),
-        serviceDate: toDateInputValue(savedInvoice.serviceDate),
-        clientName: savedInvoice.clientName ?? clientName,
-        amount: savedInvoice.amount.toString(),
-      };
-
-      setForm(savedFormFromResponse);
-      setSavedForm(savedFormFromResponse);
-      setHasExistingInvoice(Boolean(savedInvoice.id));
-      setInvoiceCreatedAt(savedInvoice.createdAt ?? null);
+      await persistInvoice();
       setSuccessMessage("Facture enregistrée");
     } catch (error) {
       setErrorMessage(
@@ -248,6 +260,41 @@ export default function InvoicePage() {
       );
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function openPdf() {
+    if (isActionDisabled) {
+      return;
+    }
+
+    const pdfWindow = window.open("", "_blank");
+
+    setIsOpeningPdf(true);
+    setErrorMessage(undefined);
+    setSuccessMessage(undefined);
+
+    try {
+      await persistInvoice();
+
+      if (!pdfWindow) {
+        throw new Error(
+          "Impossible d'ouvrir le PDF. Autorisez les popups puis réessayez.",
+        );
+      }
+
+      pdfWindow.location.href = `/api/payments/${encodeURIComponent(
+        paymentId,
+      )}/invoice/pdf`;
+    } catch (error) {
+      pdfWindow?.close();
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Impossible d'enregistrer la facture.",
+      );
+    } finally {
+      setIsOpeningPdf(false);
     }
   }
 
@@ -365,6 +412,7 @@ export default function InvoicePage() {
                 {hasUnsavedChanges ? (
                   <button
                     className="h-12 rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50"
+                    disabled={isActionDisabled}
                     onClick={() => {
                       setForm(savedForm);
                       setErrorMessage(undefined);
@@ -375,17 +423,17 @@ export default function InvoicePage() {
                     Annuler les modifications
                   </button>
                 ) : null}
-                <a
-                  className="inline-flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50"
-                  href={`/api/payments/${encodeURIComponent(paymentId)}/invoice/pdf`}
-                  rel="noreferrer"
-                  target="_blank"
+                <button
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400"
+                  disabled={isActionDisabled}
+                  onClick={openPdf}
+                  type="button"
                 >
-                  Ouvrir le PDF
-                </a>
+                  {isOpeningPdf ? "Ouverture..." : "Ouvrir le PDF"}
+                </button>
                 <button
                   className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-                  disabled={isSaving}
+                  disabled={isActionDisabled}
                   type="submit"
                 >
                   {isSaving ? "Enregistrement..." : "Enregistrer"}
