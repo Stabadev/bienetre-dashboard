@@ -603,29 +603,26 @@ function CalendarFreshness({ lastFetchedAt }: { lastFetchedAt: string }) {
   }
 
   return (
-    <section
-      className={`flex flex-col gap-3 rounded-3xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+    <div
+      className={`flex flex-wrap items-center justify-end gap-2 text-xs ${
         isPossiblyStale
-          ? "border-zinc-200 bg-white/60 text-zinc-600"
-          : "border-emerald-100 bg-emerald-50/80 text-emerald-950"
+          ? "text-amber-700"
+          : "text-zinc-500"
       }`}
     >
-      <div>
-        <p className="text-sm font-semibold">
-          Mis à jour il y a {minutesSinceRefresh} min
-        </p>
-        {isPossiblyStale ? (
-          <p className="mt-1 text-sm">Données possiblement obsolètes</p>
-        ) : null}
-      </div>
+      <p>
+        {isPossiblyStale
+          ? `Calendly possiblement obsolète · il y a ${minutesSinceRefresh} min`
+          : `Calendly mis à jour il y a ${minutesSinceRefresh} min`}
+      </p>
       <button
-        className="inline-flex h-10 w-fit items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300"
+        className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 bg-white/70 px-3 font-medium text-zinc-600 transition hover:border-amber-300 hover:text-zinc-900"
         onClick={refreshCalendar}
         type="button"
       >
         Rafraîchir
       </button>
-    </section>
+    </div>
   );
 }
 
