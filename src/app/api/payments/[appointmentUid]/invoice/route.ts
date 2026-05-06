@@ -169,16 +169,28 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Paiement introuvable." }, { status: 404 });
   }
 
-  const invoice = await db.invoice.upsert({
-    where: {
-      paymentId: decodedAppointmentUid,
-    },
-    update: data,
-    create: {
-      ...data,
-      paymentId: decodedAppointmentUid,
-    },
-  });
+  const [invoice] = await db.$transaction([
+    db.invoice.upsert({
+      where: {
+        paymentId: decodedAppointmentUid,
+      },
+      update: data,
+      create: {
+        ...data,
+        paymentId: decodedAppointmentUid,
+      },
+    }),
+    db.payment.update({
+      where: {
+        id: decodedAppointmentUid,
+      },
+      data: {
+        clientFirstName: data.clientFirstName,
+        clientLastName: data.clientLastName,
+        clientName: data.clientName,
+      },
+    }),
+  ]);
 
   return NextResponse.json(serializeInvoice(invoice));
 }
