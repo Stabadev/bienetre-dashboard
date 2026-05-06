@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import {
+  buildClientName,
+  normalizeClientName,
+  splitClientName,
+} from "@/lib/client-name";
 
 type InvoiceForm = {
   number: string;
@@ -66,33 +71,19 @@ function formatDisplayDate(value: string): string {
   }).format(new Date(value));
 }
 
-function buildClientName(firstName: string, lastName: string, fallback: string) {
-  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || fallback;
-}
-
-function splitClientName(value: string) {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length <= 1) {
-    return {
-      clientFirstName: "",
-      clientLastName: parts[0] ?? "",
-    };
-  }
-
-  return {
-    clientFirstName: parts.slice(0, -1).join(" "),
-    clientLastName: parts.at(-1) ?? "",
-  };
-}
-
 function buildInvoiceForm(invoice: InvoiceResponse, number: string): InvoiceForm {
+  const clientName = buildClientName({
+    clientFirstName: invoice.clientFirstName,
+    clientLastName: invoice.clientLastName,
+    clientName: invoice.clientName,
+  });
+
   return {
     number,
     issueDate: toDateInputValue(invoice.issueDate),
     clientFirstName: invoice.clientFirstName ?? "",
     clientLastName: invoice.clientLastName ?? "",
-    clientName: invoice.clientName ?? "",
+    clientName,
     service: invoice.service ?? "",
     serviceDate: toDateInputValue(invoice.serviceDate),
     amount: invoice.amount.toString(),
@@ -202,26 +193,25 @@ export default function InvoicePage() {
   }
 
   function updateClientName(value: string) {
-    const { clientFirstName, clientLastName } = splitClientName(value);
+    const clientName = normalizeClientName(value);
+    const { clientFirstName, clientLastName } = splitClientName(clientName);
 
     setForm((currentForm) => ({
       ...currentForm,
-      clientFirstName,
-      clientLastName,
-      clientName: value,
+      clientFirstName: clientFirstName ?? "",
+      clientLastName: clientLastName ?? "",
+      clientName,
     }));
     setSuccessMessage(undefined);
   }
 
   async function persistInvoice() {
     const currentForm = form;
-    const clientName =
-      currentForm.clientName.trim() ||
-      buildClientName(
-        currentForm.clientFirstName,
-        currentForm.clientLastName,
-        currentForm.clientName,
-      );
+    const clientName = buildClientName({
+      clientFirstName: currentForm.clientFirstName,
+      clientLastName: currentForm.clientLastName,
+      clientName: currentForm.clientName,
+    });
     const response = await fetch(
       `/api/payments/${encodeURIComponent(paymentId)}/invoice`,
       {
@@ -432,11 +422,10 @@ export default function InvoicePage() {
                       onChange={updateClientName}
                       value={
                         form.clientName ||
-                        buildClientName(
-                          form.clientFirstName,
-                          form.clientLastName,
-                          "",
-                        )
+                        buildClientName({
+                          clientFirstName: form.clientFirstName,
+                          clientLastName: form.clientLastName,
+                        })
                       }
                     />
                     <TextField

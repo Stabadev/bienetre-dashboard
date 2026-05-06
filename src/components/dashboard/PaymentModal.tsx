@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
+import {
+  buildClientName,
+  normalizeClientName,
+  splitClientName,
+} from "@/lib/client-name";
 import { formatDate, formatTime } from "./formatters";
 import type {
   PaymentDraft,
@@ -94,49 +99,26 @@ function getServiceButtonLabel(serviceLabel: string): string {
   return serviceLabel;
 }
 
-function getInitialClientFirstName(
+function getInitialClientName(
   event: CalendarEvent,
   existingPayment?: SavedPayment,
 ): string {
   return (
-    existingPayment?.clientFirstName ??
-    event.clientFirstName ??
-    ""
-  ).toLocaleUpperCase("fr-FR");
-}
-
-function getInitialClientLastName(
-  event: CalendarEvent,
-  existingPayment?: SavedPayment,
-): string {
-  return (
-    existingPayment?.clientLastName ??
-    event.clientLastName ??
-    event.clientName ??
-    ""
-  ).toLocaleUpperCase("fr-FR");
+    normalizeClientName(existingPayment?.clientName) ||
+    buildClientName({
+      clientFirstName: existingPayment?.clientFirstName,
+      clientLastName: existingPayment?.clientLastName,
+    }) ||
+    normalizeClientName(event.clientName) ||
+    buildClientName({
+      clientFirstName: event.clientFirstName,
+      clientLastName: event.clientLastName,
+    })
+  );
 }
 
 function getContactDisplay(email: string, phone: string): string {
   return `${email} • ${phone}`;
-}
-
-function getClientFullName(firstName: string, lastName: string): string {
-  return [firstName, lastName].filter(Boolean).join(" ");
-}
-
-function updateClientName(
-  value: string,
-  setClientFirstName: (value: string) => void,
-  setClientLastName: (value: string) => void,
-) {
-  const normalizedValue = value.toLocaleUpperCase("fr-FR");
-  const nameParts = normalizedValue.trim().split(/\s+/).filter(Boolean);
-  const lastName = nameParts.at(-1) ?? "";
-  const firstName = nameParts.slice(0, -1).join(" ");
-
-  setClientLastName(lastName);
-  setClientFirstName(firstName);
 }
 
 type PaymentModalProps = {
@@ -165,11 +147,8 @@ export function PaymentModal({
   const contactDisplay = getContactDisplay(clientEmail, clientPhone);
   const isEditing = existingPayment !== undefined;
   const initialService = getInitialService(event, existingPayment);
-  const [clientFirstName, setClientFirstName] = useState(
-    getInitialClientFirstName(event, existingPayment),
-  );
-  const [clientLastName, setClientLastName] = useState(
-    getInitialClientLastName(event, existingPayment),
+  const [clientName, setClientName] = useState(
+    getInitialClientName(event, existingPayment),
   );
   const [service, setService] = useState(initialService);
   const [amount, setAmount] = useState(
@@ -186,7 +165,6 @@ export function PaymentModal({
   const parsedAmount = Number(amount);
   const canValidate =
     amount !== "" && Number.isInteger(parsedAmount) && parsedAmount > 0;
-  const clientFullName = getClientFullName(clientFirstName, clientLastName);
   const selectedServiceLabel = getMatchingServiceLabel(service) ?? service;
   const isSubmitting = isSaving || submittingMethod !== undefined;
   const isPaymentActionDisabled = !canValidate || isSubmitting || isDeleting;
@@ -214,10 +192,15 @@ export function PaymentModal({
 
     isSubmittingRef.current = true;
     setSubmittingMethod(paymentMethod);
+    const normalizedClientName = normalizeClientName(clientName);
+    const { clientFirstName, clientLastName } =
+      splitClientName(normalizedClientName);
+
     onValidate({
       amount: parsedAmount,
-      clientFirstName: clientFirstName.trim() || null,
-      clientLastName: clientLastName.trim() || null,
+      clientFirstName,
+      clientLastName,
+      clientName: normalizedClientName || null,
       method: paymentMethod,
       service,
     });
@@ -277,16 +260,10 @@ export function PaymentModal({
               Nom du client
               <input
                 className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-                onChange={(event) =>
-                  updateClientName(
-                    event.target.value,
-                    setClientFirstName,
-                    setClientLastName,
-                  )
-                }
+                onChange={(event) => setClientName(event.target.value)}
                 placeholder="Nom du client"
                 type="text"
-                value={clientFullName}
+                value={clientName}
               />
             </label>
 

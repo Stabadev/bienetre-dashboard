@@ -65,8 +65,7 @@ export default async function DashboardExportPage() {
                 <tr>
                   {[
                     "Date",
-                    "Nom",
-                    "Prénom",
+                    "Client",
                     "Espèces",
                     "Chèque",
                     "Virement",
@@ -86,10 +85,7 @@ export default async function DashboardExportPage() {
                         {row.date}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        {row.lastName}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        {row.firstName}
+                        {row.client}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {formatAmountCell(row.cashAmount)}
@@ -107,7 +103,7 @@ export default async function DashboardExportPage() {
                   <tr>
                     <td
                       className="px-4 py-8 text-center text-sm text-zinc-500"
-                      colSpan={7}
+                      colSpan={6}
                     >
                       Aucun paiement enregistré pour le moment.
                     </td>

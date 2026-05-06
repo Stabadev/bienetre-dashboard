@@ -1,3 +1,5 @@
+import { buildClientName, normalizeClientName } from "@/lib/client-name";
+
 const CALENDLY_API_BASE_URL = "https://api.calendly.com";
 const CALENDAR_CACHE_DURATION_MS = 5 * 60 * 1000;
 
@@ -223,6 +225,14 @@ function simplifyCalendlyEvent(
     "Un rendez-vous Calendly ne contient pas de date de début.",
   );
   const endTime = readString(event.end_time) ?? startTime;
+  const clientFirstName = normalizeClientName(readString(invitee?.first_name)) || null;
+  const clientLastName = normalizeClientName(readString(invitee?.last_name)) || null;
+  const clientName =
+    buildClientName({
+      clientFirstName,
+      clientLastName,
+      clientName: readString(invitee?.name),
+    }) || null;
 
   return {
     uid: eventUri,
@@ -237,9 +247,9 @@ function simplifyCalendlyEvent(
     ),
     calendlyEventUri: eventUri,
     calendlyInviteeUri: readString(invitee?.uri),
-    clientFirstName: readString(invitee?.first_name),
-    clientLastName: readString(invitee?.last_name),
-    clientName: readString(invitee?.name),
+    clientFirstName,
+    clientLastName,
+    clientName,
     clientEmail: readString(invitee?.email),
     clientPhone: readString(invitee?.text_reminder_number),
     eventStatus: readString(event.status),

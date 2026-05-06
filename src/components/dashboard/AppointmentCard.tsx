@@ -11,26 +11,16 @@ type AppointmentCardProps = {
   onSelect: (event: CalendarEvent) => void;
 };
 
-function getClientLastName(
-  event: CalendarEvent,
-  payment?: SavedPayment,
-): string {
-  return (
-    payment?.clientLastName ??
-    payment?.clientName ??
-    event.clientLastName ??
-    event.clientName ??
-    event.title
-  ).toLocaleUpperCase("fr-FR");
-}
+function getClientName(event: CalendarEvent, payment?: SavedPayment): string {
+  const legacyName = [
+    payment?.clientFirstName ?? event.clientFirstName,
+    payment?.clientLastName ?? event.clientLastName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const clientName = payment?.clientName ?? event.clientName ?? legacyName;
 
-function getClientFirstName(
-  event: CalendarEvent,
-  payment?: SavedPayment,
-): string | null {
-  return (
-    payment?.clientFirstName ?? event.clientFirstName
-  )?.toLocaleUpperCase("fr-FR") ?? null;
+  return (clientName || "Client non renseigné").toLocaleUpperCase("fr-FR");
 }
 
 function getServiceLabel(event: CalendarEvent, payment?: SavedPayment): string {
@@ -43,8 +33,7 @@ export function AppointmentCard({
   onSelect,
 }: AppointmentCardProps) {
   const isPaid = payment !== undefined;
-  const clientFirstName = getClientFirstName(event, payment);
-  const clientLastName = getClientLastName(event, payment);
+  const clientName = getClientName(event, payment);
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const service = getServiceLabel(event, payment);
@@ -57,7 +46,7 @@ export function AppointmentCard({
           : "border-amber-200 bg-white"
       }`}
     >
-      <article className="grid gap-3 text-sm lg:grid-cols-[minmax(8.5rem,10rem)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(11rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,auto)] lg:items-center lg:gap-4">
+      <article className="grid gap-3 text-sm lg:grid-cols-[minmax(8.5rem,10rem)_minmax(10rem,1.8fr)_minmax(8.5rem,1fr)_minmax(11rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,auto)] lg:items-center lg:gap-4">
         <div className="flex items-baseline gap-2 sm:block">
           <p className="font-semibold text-zinc-950">
             {formatTime(event.startAt)}
@@ -72,19 +61,8 @@ export function AppointmentCard({
         </div>
 
         <div className="min-w-0">
-          <p className="text-xs font-medium text-zinc-500">Nom</p>
-          <p className="truncate font-semibold text-zinc-950">{clientLastName}</p>
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-zinc-500">Prénom</p>
-          {clientFirstName ? (
-            <p className="truncate font-medium text-zinc-800">
-              {clientFirstName}
-            </p>
-          ) : (
-            <p className="text-zinc-400">-</p>
-          )}
+          <p className="text-xs font-medium text-zinc-500">Client</p>
+          <p className="truncate font-semibold text-zinc-950">{clientName}</p>
         </div>
 
         <div className="min-w-0">

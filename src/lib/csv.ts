@@ -1,3 +1,5 @@
+import { buildClientName } from "@/lib/client-name";
+
 export type ExportPayment = {
   title: string;
   clientFirstName: string | null;
@@ -11,8 +13,7 @@ export type ExportPayment = {
 
 export type PaymentExportRow = {
   date: string;
-  lastName: string;
-  firstName: string;
+  client: string;
   cashAmount: number | "";
   checkAmount: number | "";
   transferAmount: number | "";
@@ -41,10 +42,6 @@ function escapeCsvValue(value: string | number): string {
   }
 
   return stringValue;
-}
-
-function formatUppercase(value: string | null): string {
-  return value?.toLocaleUpperCase("fr-FR") ?? "";
 }
 
 function normalizePaymentMethod(method: string): string {
@@ -83,8 +80,11 @@ export function buildPaymentExportRows(
 
     return {
       date: dateFormatter.format(payment.startAt),
-      lastName: formatUppercase(payment.clientLastName ?? payment.clientName),
-      firstName: formatUppercase(payment.clientFirstName),
+      client: buildClientName({
+        clientFirstName: payment.clientFirstName,
+        clientLastName: payment.clientLastName,
+        clientName: payment.clientName,
+      }),
       cashAmount,
       checkAmount,
       transferAmount,
@@ -96,8 +96,7 @@ export function buildPaymentExportRows(
 export function buildPaymentsCsv(payments: ExportPayment[]): string {
   const headers = [
     "Date",
-    "Nom",
-    "Prénom",
+    "Client",
     "Espèces",
     "Chèque",
     "Virement",
@@ -106,8 +105,7 @@ export function buildPaymentsCsv(payments: ExportPayment[]): string {
 
   const rows = buildPaymentExportRows(payments).map((row) => [
     row.date,
-    row.lastName,
-    row.firstName,
+    row.client,
     row.cashAmount,
     row.checkAmount,
     row.transferAmount,

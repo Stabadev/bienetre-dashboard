@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
+import { buildClientName, normalizeClientName } from "@/lib/client-name";
 import { AppointmentCard } from "./AppointmentCard";
 import { PaymentModal } from "./PaymentModal";
 import { formatCurrency } from "./formatters";
@@ -71,11 +72,18 @@ function getMinutesSince(value: string): number {
 }
 
 function getClientName(event: CalendarEvent, payment: PaymentDraft): string {
-  const fullName = [payment.clientLastName, payment.clientFirstName]
-    .filter(Boolean)
-    .join(" ");
-
-  return fullName || event.clientName || event.title;
+  return (
+    normalizeClientName(payment.clientName) ||
+    normalizeClientName(event.clientName) ||
+    buildClientName({
+      clientFirstName: payment.clientFirstName,
+      clientLastName: payment.clientLastName,
+    }) ||
+    buildClientName({
+      clientFirstName: event.clientFirstName,
+      clientLastName: event.clientLastName,
+    })
+  );
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

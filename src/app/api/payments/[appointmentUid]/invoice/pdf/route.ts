@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { requireAuthResponse } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { buildClientName } from "@/lib/client-name";
 import { InvoicePdfDocument } from "@/components/invoices/InvoicePdfDocument";
 
 type RouteContext = {
@@ -33,11 +34,11 @@ function getClientNameForFilename(invoice: {
   clientLastName: string;
   clientName: string;
 }) {
-  const fullName = [invoice.clientFirstName, invoice.clientLastName]
-    .filter(Boolean)
-    .join("-");
-
-  return fullName || invoice.clientName;
+  return buildClientName({
+    clientFirstName: invoice.clientFirstName,
+    clientLastName: invoice.clientLastName,
+    clientName: invoice.clientName,
+  });
 }
 
 function getInvoiceFilename(invoice: {
