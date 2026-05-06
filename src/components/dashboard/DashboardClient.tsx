@@ -14,6 +14,10 @@ type DashboardClientProps = {
 };
 
 type SectionKey = "overdue" | "today" | "paid" | "upcoming";
+type PaymentsByEventKey = Record<string, SavedPayment>;
+
+const PAYMENTS_BY_EVENT_KEY_STORAGE_KEY =
+  "bienetre-dashboard:paymentsByEventKey";
 
 function getEventKey(event: CalendarEvent): string {
   return `${event.uid}-${event.startAt}`;
@@ -86,6 +90,90 @@ function getClientName(event: CalendarEvent, payment: PaymentDraft): string {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSavedPayment(value: unknown): value is SavedPayment {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.appointmentUid === "string" &&
+    typeof value.title === "string" &&
+    typeof value.startAt === "string" &&
+    typeof value.endAt === "string" &&
+    typeof value.amount === "number" &&
+    typeof value.method === "string" &&
+    typeof value.paidAt === "string"
+  );
+}
+
+function isPaymentsByEventKey(value: unknown): value is PaymentsByEventKey {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.entries(value).every(
+    ([eventKey, payment]) =>
+      typeof eventKey === "string" &&
+      isSavedPayment(payment) &&
+      payment.appointmentUid === eventKey,
+  );
+}
+
+function readCachedPaymentsByEventKey(): PaymentsByEventKey | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const cachedPayments = window.localStorage.getItem(
+    PAYMENTS_BY_EVENT_KEY_STORAGE_KEY,
+  );
+
+  if (!cachedPayments) {
+    return null;
+  }
+
+  try {
+    const parsedPayments = JSON.parse(cachedPayments) as unknown;
+
+    if (isPaymentsByEventKey(parsedPayments)) {
+      return parsedPayments;
+    }
+  } catch {
+    // Ignore invalid local cache and fall back to the API response.
+  }
+
+  window.localStorage.removeItem(PAYMENTS_BY_EVENT_KEY_STORAGE_KEY);
+
+  return null;
+}
+
+function writeCachedPaymentsByEventKey(paymentsByEventKey: PaymentsByEventKey) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      PAYMENTS_BY_EVENT_KEY_STORAGE_KEY,
+      JSON.stringify(paymentsByEventKey),
+    );
+  } catch {
+    // localStorage can be unavailable or full; the database remains authoritative.
+  }
+}
+
+function indexPaymentsByEventKey(payments: SavedPayment[]): PaymentsByEventKey {
+  return payments.reduce<PaymentsByEventKey>((indexedPayments, payment) => {
+    indexedPayments[payment.appointmentUid] = payment;
+    return indexedPayments;
+  }, {});
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => null)) as {
     error?: string;
@@ -99,9 +187,8 @@ export function DashboardClient({
   lastFetchedAt,
 }: DashboardClientProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [paymentsByEventKey, setPaymentsByEventKey] = useState<
-    Record<string, SavedPayment>
-  >({});
+  const [paymentsByEventKey, setPaymentsByEventKey] =
+    useState<PaymentsByEventKey>({});
   const [isDeletingPayment, setIsDeletingPayment] = useState(false);
   const [isLoadingPayments, setIsLoadingPayments] = useState(true);
   const [isSavingPayment, setIsSavingPayment] = useState(false);
@@ -121,6 +208,19 @@ export function DashboardClient({
   useEffect(() => {
     let isMounted = true;
 
+    queueMicrotask(() => {
+      if (!isMounted) {
+        return;
+      }
+
+      const cachedPayments = readCachedPaymentsByEventKey();
+
+      if (cachedPayments) {
+        setPaymentsByEventKey(cachedPayments);
+        setIsLoadingPayments(false);
+      }
+    });
+
     async function loadPayments() {
       try {
         const response = await fetch("/api/payments");
@@ -135,15 +235,10 @@ export function DashboardClient({
           return;
         }
 
-        setPaymentsByEventKey(
-          payments.reduce<Record<string, SavedPayment>>(
-            (indexedPayments, payment) => {
-              indexedPayments[payment.appointmentUid] = payment;
-              return indexedPayments;
-            },
-            {},
-          ),
-        );
+        const indexedPayments = indexPaymentsByEventKey(payments);
+
+        setPaymentsByEventKey(indexedPayments);
+        writeCachedPaymentsByEventKey(indexedPayments);
       } catch {
         if (isMounted) {
           setPaymentsLoadError("Impossible de charger les paiements.");
@@ -270,10 +365,16 @@ export function DashboardClient({
 
       const savedPayment = (await response.json()) as SavedPayment;
 
-      setPaymentsByEventKey((currentPayments) => ({
-        ...currentPayments,
-        [savedPayment.appointmentUid]: savedPayment,
-      }));
+      setPaymentsByEventKey((currentPayments) => {
+        const nextPayments = {
+          ...currentPayments,
+          [savedPayment.appointmentUid]: savedPayment,
+        };
+
+        writeCachedPaymentsByEventKey(nextPayments);
+
+        return nextPayments;
+      });
       setSelectedEvent(null);
     } catch (error) {
       setPaymentError(
@@ -314,6 +415,9 @@ export function DashboardClient({
       setPaymentsByEventKey((currentPayments) => {
         const nextPayments = { ...currentPayments };
         delete nextPayments[appointmentUid];
+
+        writeCachedPaymentsByEventKey(nextPayments);
+
         return nextPayments;
       });
       setSelectedEvent(null);

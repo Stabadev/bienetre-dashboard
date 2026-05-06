@@ -79,6 +79,7 @@ type CalendarEventsCache = {
 };
 
 let calendarEventsCache: CalendarEventsCache | null = null;
+let calendarEventsRefreshPromise: Promise<CalendarEventsCache> | null = null;
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -293,6 +294,44 @@ async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
   );
 }
 
+function serializeCalendarEventsCache(
+  cache: CalendarEventsCache,
+): CalendarEventsResult {
+  return {
+    events: cache.events,
+    lastFetchedAt: new Date(cache.fetchedAt).toISOString(),
+  };
+}
+
+function refreshCalendarEventsCache(): Promise<CalendarEventsCache> {
+  if (!calendarEventsRefreshPromise) {
+    calendarEventsRefreshPromise = fetchCalendarEventsFromCalendly()
+      .then((events) => {
+        const fetchedAt = Date.now();
+        const nextCache = {
+          events,
+          expiresAt: fetchedAt + CALENDAR_CACHE_DURATION_MS,
+          fetchedAt,
+        };
+
+        calendarEventsCache = nextCache;
+
+        return nextCache;
+      })
+      .finally(() => {
+        calendarEventsRefreshPromise = null;
+      });
+  }
+
+  return calendarEventsRefreshPromise;
+}
+
+function refreshCalendarEventsCacheInBackground() {
+  void refreshCalendarEventsCache().catch(() => {
+    // Keep serving the last known calendar if background refresh fails.
+  });
+}
+
 export async function getCalendarEvents({
   forceRefresh = false,
 }: {
@@ -300,39 +339,19 @@ export async function getCalendarEvents({
 } = {}): Promise<CalendarEventsResult> {
   const now = Date.now();
 
-  if (
-    !forceRefresh &&
-    calendarEventsCache &&
-    calendarEventsCache.expiresAt > now
-  ) {
-    return {
-      events: calendarEventsCache.events,
-      lastFetchedAt: new Date(calendarEventsCache.fetchedAt).toISOString(),
-    };
+  if (!forceRefresh && calendarEventsCache) {
+    if (calendarEventsCache.expiresAt <= now) {
+      refreshCalendarEventsCacheInBackground();
+    }
+
+    return serializeCalendarEventsCache(calendarEventsCache);
   }
 
   try {
-    const events = await fetchCalendarEventsFromCalendly();
-    const fetchedAt = Date.now();
-
-    // Cache volontairement court pour limiter les appels Calendly sans masquer
-    // longtemps les changements de planning.
-    calendarEventsCache = {
-      events,
-      expiresAt: fetchedAt + CALENDAR_CACHE_DURATION_MS,
-      fetchedAt,
-    };
-
-    return {
-      events,
-      lastFetchedAt: new Date(fetchedAt).toISOString(),
-    };
+    return serializeCalendarEventsCache(await refreshCalendarEventsCache());
   } catch (error) {
     if (calendarEventsCache) {
-      return {
-        events: calendarEventsCache.events,
-        lastFetchedAt: new Date(calendarEventsCache.fetchedAt).toISOString(),
-      };
+      return serializeCalendarEventsCache(calendarEventsCache);
     }
 
     throw error;
