@@ -13,7 +13,7 @@ type DashboardClientProps = {
   lastFetchedAt: string;
 };
 
-type SectionKey = "overdue" | "today" | "paid" | "upcoming";
+type SectionKey = "currentMonth" | "overdue" | "today" | "paid" | "upcoming";
 type PaymentsByEventKey = Record<string, SavedPayment>;
 
 const PAYMENTS_BY_EVENT_KEY_STORAGE_KEY =
@@ -35,33 +35,13 @@ function isSameCalendarDay(dateA: Date, dateB: Date): boolean {
   );
 }
 
-function getWeekStart(date: Date): Date {
-  const weekStart = new Date(date);
-  const day = weekStart.getDay();
-  const distanceFromMonday = day === 0 ? 6 : day - 1;
-
-  weekStart.setDate(weekStart.getDate() - distanceFromMonday);
-  weekStart.setHours(0, 0, 0, 0);
-
-  return weekStart;
-}
-
-function getWeekEnd(date: Date): Date {
-  const weekEnd = getWeekStart(date);
-
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
-
-  return weekEnd;
-}
-
-function isDateInCurrentWeek(value: string): boolean {
+function isDateInCurrentMonth(value: string): boolean {
   const date = new Date(value);
   const now = new Date();
 
   return (
-    date.getTime() >= getWeekStart(now).getTime() &&
-    date.getTime() <= getWeekEnd(now).getTime()
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth()
   );
 }
 
@@ -198,6 +178,7 @@ export function DashboardClient({
   const [paymentError, setPaymentError] = useState<string | undefined>();
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(
     {
+      currentMonth: true,
       overdue: true,
       today: true,
       paid: true,
@@ -302,6 +283,12 @@ export function DashboardClient({
     });
   }, [unpaidEvents]);
 
+  const currentMonthUnpaidEvents = useMemo(
+    () =>
+      unpaidEvents.filter((event) => isDateInCurrentMonth(event.startAt)),
+    [unpaidEvents],
+  );
+
   const displayedPayments = useMemo(
     () =>
       paidEvents
@@ -310,11 +297,11 @@ export function DashboardClient({
     [paidEvents, paymentsByEventKey],
   );
 
-  const weeklyAmount = useMemo(
+  const currentMonthAmount = useMemo(
     () =>
       displayedPayments
         .filter((payment) =>
-          isDateInCurrentWeek(payment.paidAt ?? payment.startAt),
+          isDateInCurrentMonth(payment.paidAt ?? payment.startAt),
         )
         .reduce((total, payment) => total + payment.amount, 0),
     [displayedPayments],
@@ -436,10 +423,10 @@ export function DashboardClient({
     <>
       <div className="grid gap-6">
         <SummaryCards
+          currentMonthAmount={currentMonthAmount}
           overdueCount={overdueEvents.length}
           paidCount={displayedPayments.length}
           todayCount={todayEvents.length}
-          weeklyAmount={weeklyAmount}
         />
 
         <CalendarFreshness lastFetchedAt={lastFetchedAt} />
@@ -447,6 +434,18 @@ export function DashboardClient({
         <DashboardStatus
           isLoading={isLoadingPayments}
           message={paymentsLoadError}
+        />
+
+        <DashboardSection
+          count={currentMonthUnpaidEvents.length}
+          emptyMessage="Aucun paiement à traiter pour le mois en cours."
+          events={currentMonthUnpaidEvents}
+          isOpen={openSections.currentMonth}
+          onToggle={() => toggleSection("currentMonth")}
+          onSelect={setSelectedEvent}
+          paymentsByEventKey={paymentsByEventKey}
+          tone="active"
+          title="Mois en cours"
         />
 
         <DashboardSection
@@ -534,15 +533,15 @@ function downloadCsv() {
 }
 
 function SummaryCards({
+  currentMonthAmount,
   overdueCount,
   paidCount,
   todayCount,
-  weeklyAmount,
 }: {
+  currentMonthAmount: number;
   overdueCount: number;
   paidCount: number;
   todayCount: number;
-  weeklyAmount: number;
 }) {
   const cards = [
     {
@@ -560,8 +559,8 @@ function SummaryCards({
       labelClassName: "text-emerald-700",
     },
     {
-      label: "Encaissé cette semaine",
-      value: formatCurrency(weeklyAmount),
+      label: "Encaissé ce mois-ci",
+      value: formatCurrency(currentMonthAmount),
       className: "bg-zinc-950 text-white",
       valueClassName: "text-white",
       labelClassName: "text-zinc-300",
