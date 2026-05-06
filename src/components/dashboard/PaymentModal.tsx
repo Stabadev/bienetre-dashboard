@@ -86,20 +86,12 @@ function getInitialAmount(
   );
 }
 
-function getServiceOptions(serviceLabel: string) {
-  if (services.some((service) => service.label === serviceLabel)) {
-    return services;
+function getServiceButtonLabel(serviceLabel: string): string {
+  if (serviceLabel === "Séance de suite des soins") {
+    return "Séance de suite";
   }
 
-  return [
-    {
-      label: serviceLabel,
-      duration: "",
-      description: "prestation issue du rendez-vous Calendly",
-      price: 0,
-    },
-    ...services,
-  ];
+  return serviceLabel;
 }
 
 function getInitialClientFirstName(
@@ -190,7 +182,7 @@ export function PaymentModal({
   const canValidate =
     amount !== "" && Number.isInteger(parsedAmount) && parsedAmount > 0;
   const clientFullName = getClientFullName(clientFirstName, clientLastName);
-  const serviceOptions = getServiceOptions(service);
+  const selectedServiceLabel = getMatchingServiceLabel(service) ?? service;
 
   function selectService(serviceLabel: string) {
     setService(serviceLabel);
@@ -285,22 +277,30 @@ export function PaymentModal({
           </div>
 
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.9fr)]">
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Prestation
-              <select
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-                onChange={(event) => selectService(event.target.value)}
-                value={service}
-              >
-                {serviceOptions.map((serviceOption) => (
-                  <option key={serviceOption.label} value={serviceOption.label}>
-                    {serviceOption.duration
-                      ? `${serviceOption.label} - ${serviceOption.duration} - ${serviceOption.price} €`
-                      : serviceOption.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <fieldset>
+              <legend className="text-sm font-medium">Prestation</legend>
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                {services.map((serviceOption) => {
+                  const isSelected = selectedServiceLabel === serviceOption.label;
+
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className={`flex h-10 items-center justify-center rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-amber-600/20 ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-600 text-white"
+                          : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
+                      }`}
+                      key={serviceOption.label}
+                      onClick={() => selectService(serviceOption.label)}
+                      type="button"
+                    >
+                      {getServiceButtonLabel(serviceOption.label)}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             <fieldset>
               <legend className="text-sm font-medium">Mode de paiement</legend>
