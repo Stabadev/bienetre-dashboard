@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
 import { buildClientName, normalizeClientName } from "@/lib/client-name";
@@ -445,13 +446,12 @@ export function DashboardClient({
       events: paidEvents,
       tone: "paid",
       action: (
-        <button
-          className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-          onClick={downloadCsv}
-          type="button"
+        <Link
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          href="/dashboard/export"
         >
-          Exporter CSV
-        </button>
+          Voir l’export
+        </Link>
       ),
     },
   ] satisfies Array<{
@@ -546,16 +546,6 @@ export function DashboardClient({
       ) : null}
     </>
   );
-}
-
-function downloadCsv() {
-  const link = document.createElement("a");
-
-  link.href = "/api/export";
-  link.download = "paiements-bienetre-dashboard.csv";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }
 
 function SummaryCards({
