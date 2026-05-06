@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/calendar";
 import { formatDate, formatTime } from "./formatters";
 import type {
@@ -9,7 +9,7 @@ import type {
   SavedPayment,
 } from "./types";
 
-const paymentMethods: PaymentMethod[] = ["espèces", "chèque", "virement"];
+const paymentMethods: PaymentMethod[] = ["chèque", "espèces", "virement"];
 
 const services: Array<{
   label: string;
@@ -177,16 +177,49 @@ export function PaymentModal({
   const [method, setMethod] = useState<PaymentMethod>(
     getInitialPaymentMethod(existingPayment),
   );
+  const isSubmittingRef = useRef(false);
+  const [submittingMethod, setSubmittingMethod] = useState<
+    PaymentMethod | undefined
+  >();
 
   const parsedAmount = Number(amount);
   const canValidate =
     amount !== "" && Number.isInteger(parsedAmount) && parsedAmount > 0;
   const clientFullName = getClientFullName(clientFirstName, clientLastName);
   const selectedServiceLabel = getMatchingServiceLabel(service) ?? service;
+  const isSubmitting = isSaving || submittingMethod !== undefined;
+  const isPaymentActionDisabled = !canValidate || isSubmitting || isDeleting;
+
+  useEffect(() => {
+    if (!isSaving && isSubmittingRef.current) {
+      isSubmittingRef.current = false;
+      const timeoutId = window.setTimeout(() => {
+        setSubmittingMethod(undefined);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [isSaving]);
 
   function selectService(serviceLabel: string) {
     setService(serviceLabel);
     setAmount(getDefaultAmountFromService(serviceLabel));
+  }
+
+  function submitPayment(paymentMethod = method) {
+    if (!canValidate || isSaving || isDeleting || isSubmittingRef.current) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmittingMethod(paymentMethod);
+    onValidate({
+      amount: parsedAmount,
+      clientFirstName: clientFirstName.trim() || null,
+      clientLastName: clientLastName.trim() || null,
+      method: paymentMethod,
+      service,
+    });
   }
 
   return (
@@ -212,7 +245,7 @@ export function PaymentModal({
             <button
               aria-label="Fermer"
               className="rounded-lg px-3 py-2 text-xl leading-none text-zinc-500 hover:bg-white hover:text-zinc-900"
-              disabled={isSaving || isDeleting}
+              disabled={isSubmitting || isDeleting}
               onClick={onClose}
               type="button"
             >
@@ -276,7 +309,7 @@ export function PaymentModal({
             </label>
           </div>
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.9fr)]">
+          <div className="mt-3">
             <fieldset>
               <legend className="text-sm font-medium">Prestation</legend>
               <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
@@ -301,25 +334,38 @@ export function PaymentModal({
                 })}
               </div>
             </fieldset>
+          </div>
 
+          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/50 p-3">
             <fieldset>
-              <legend className="text-sm font-medium">Mode de paiement</legend>
+              <legend className="text-sm font-semibold text-amber-950">
+                Encaisser avec :
+              </legend>
               <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
-                {paymentMethods.map((paymentMethod) => (
-                  <label
-                    className="flex h-10 cursor-pointer items-center justify-center rounded-xl border border-zinc-200 px-3 text-sm font-semibold capitalize transition hover:border-amber-300 has-[:checked]:border-amber-600 has-[:checked]:bg-amber-600 has-[:checked]:text-white"
-                    key={paymentMethod}
-                  >
-                    <input
-                      checked={method === paymentMethod}
-                      className="sr-only"
-                      name="paymentMethod"
-                      onChange={() => setMethod(paymentMethod)}
-                      type="radio"
-                    />
-                    {paymentMethod}
-                  </label>
-                ))}
+                {paymentMethods.map((paymentMethod) => {
+                  const isSelected = method === paymentMethod;
+                  const isSubmittingMethod = submittingMethod === paymentMethod;
+
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className={`flex h-10 items-center justify-center rounded-xl border px-3 text-sm font-semibold capitalize transition focus:outline-none focus:ring-2 focus:ring-amber-600/20 disabled:cursor-not-allowed ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-600 text-white"
+                          : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
+                      } disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400`}
+                      disabled={isPaymentActionDisabled}
+                      key={paymentMethod}
+                      onClick={() => {
+                        setMethod(paymentMethod);
+                        submitPayment(paymentMethod);
+                      }}
+                      type="button"
+                    >
+                      {isSubmittingMethod ? "Enregistrement..." : paymentMethod}
+                    </button>
+                  );
+                })}
               </div>
             </fieldset>
           </div>
@@ -336,7 +382,7 @@ export function PaymentModal({
             {existingPayment ? (
               <button
                 className="h-10 rounded-xl border border-red-200 bg-white px-4 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
-                disabled={isSaving || isDeleting}
+                disabled={isSubmitting || isDeleting}
                 onClick={onDelete}
                 type="button"
               >
@@ -348,27 +394,11 @@ export function PaymentModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               className="h-10 rounded-xl border border-zinc-300 bg-white px-4 font-medium text-zinc-700 hover:bg-zinc-50"
-              disabled={isSaving || isDeleting}
+              disabled={isSubmitting || isDeleting}
               onClick={onClose}
               type="button"
             >
               Annuler
-            </button>
-            <button
-              className="h-10 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-              disabled={!canValidate || isSaving || isDeleting}
-              onClick={() =>
-                onValidate({
-                  amount: parsedAmount,
-                  clientFirstName: clientFirstName.trim() || null,
-                  clientLastName: clientLastName.trim() || null,
-                  method,
-                  service,
-                })
-              }
-              type="button"
-            >
-              {isSaving ? "Enregistrement..." : "Enregistrer le paiement"}
             </button>
           </div>
         </div>
