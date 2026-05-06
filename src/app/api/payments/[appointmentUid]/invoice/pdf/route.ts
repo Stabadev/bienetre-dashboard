@@ -63,11 +63,13 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const { appointmentUid } = await context.params;
-  const decodedAppointmentUid = decodeURIComponent(appointmentUid);
+  // Le segment reste nommé appointmentUid pour compatibilité avec les autres routes dynamiques Next.js,
+  // mais les routes invoice reçoivent un Payment.id.
+  const paymentId = decodeURIComponent(appointmentUid);
 
   const invoice = await db.invoice.findUnique({
     where: {
-      paymentId: decodedAppointmentUid,
+      paymentId,
     },
   });
 

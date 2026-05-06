@@ -99,11 +99,13 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const { appointmentUid } = await context.params;
-  const decodedAppointmentUid = decodeURIComponent(appointmentUid);
+  // Le segment reste nommé appointmentUid pour compatibilité avec les autres routes dynamiques Next.js,
+  // mais les routes invoice reçoivent un Payment.id.
+  const paymentId = decodeURIComponent(appointmentUid);
 
   const invoice = await db.invoice.findUnique({
     where: {
-      paymentId: decodedAppointmentUid,
+      paymentId,
     },
   });
 
@@ -113,7 +115,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const payment = await db.payment.findUnique({
     where: {
-      id: decodedAppointmentUid,
+      id: paymentId,
     },
   });
 
@@ -144,7 +146,9 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const { appointmentUid } = await context.params;
-  const decodedAppointmentUid = decodeURIComponent(appointmentUid);
+  // Le segment reste nommé appointmentUid pour compatibilité avec les autres routes dynamiques Next.js,
+  // mais les routes invoice reçoivent un Payment.id.
+  const paymentId = decodeURIComponent(appointmentUid);
 
   let body: InvoicePayload;
 
@@ -158,7 +162,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const payment = await db.payment.findUnique({
     where: {
-      id: decodedAppointmentUid,
+      id: paymentId,
     },
     select: {
       id: true,
@@ -172,17 +176,17 @@ export async function POST(request: Request, context: RouteContext) {
   const [invoice] = await db.$transaction([
     db.invoice.upsert({
       where: {
-        paymentId: decodedAppointmentUid,
+        paymentId,
       },
       update: data,
       create: {
         ...data,
-        paymentId: decodedAppointmentUid,
+        paymentId,
       },
     }),
     db.payment.update({
       where: {
-        id: decodedAppointmentUid,
+        id: paymentId,
       },
       data: {
         clientFirstName: data.clientFirstName,
