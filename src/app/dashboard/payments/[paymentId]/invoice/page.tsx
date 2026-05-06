@@ -103,11 +103,13 @@ export default function InvoicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningPdf, setIsOpeningPdf] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
   const hasUnsavedChanges =
     JSON.stringify(form) !== JSON.stringify(savedForm);
   const isActionDisabled = isSaving || isOpeningPdf;
+  const areFieldsDisabled = isActionDisabled || isLocked;
 
   useEffect(() => {
     let isMounted = true;
@@ -151,6 +153,7 @@ export default function InvoicePage() {
         setForm(loadedForm);
         setSavedForm(loadedForm);
         setHasExistingInvoice(Boolean(invoice.id));
+        setIsLocked(Boolean(invoice.id));
         setInvoiceCreatedAt(invoice.createdAt ?? null);
       } catch (error) {
         if (isMounted) {
@@ -286,6 +289,7 @@ export default function InvoicePage() {
       pdfWindow.location.href = `/api/payments/${encodeURIComponent(
         paymentId,
       )}/invoice/pdf`;
+      setIsLocked(true);
     } catch (error) {
       pdfWindow?.close();
       setErrorMessage(
@@ -295,6 +299,24 @@ export default function InvoicePage() {
       );
     } finally {
       setIsOpeningPdf(false);
+    }
+  }
+
+  function editInvoice() {
+    setIsLocked(false);
+    setSuccessMessage(undefined);
+  }
+
+  function downloadInvoice() {
+    const pdfWindow = window.open(
+      `/api/payments/${encodeURIComponent(paymentId)}/invoice/pdf`,
+      "_blank",
+    );
+
+    if (!pdfWindow) {
+      setErrorMessage(
+        "Impossible d'ouvrir le PDF. Autorisez les popups puis réessayez.",
+      );
     }
   }
 
@@ -328,7 +350,12 @@ export default function InvoicePage() {
             </p>
           ) : (
             <div className="flex flex-col gap-5">
-              {hasExistingInvoice ? (
+              {isLocked ? (
+                <p className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700">
+                  Facture enregistrée et générée. Déverrouillez-la pour la
+                  modifier.
+                </p>
+              ) : hasExistingInvoice ? (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                   {invoiceCreatedAt
                     ? `Facture enregistrée le ${formatDisplayDate(
@@ -338,56 +365,73 @@ export default function InvoicePage() {
                 </p>
               ) : null}
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div
+                className={`grid gap-4 sm:grid-cols-2 ${
+                  isLocked ? "opacity-60" : ""
+                }`}
+              >
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Numéro facture"
                   onChange={(value) => updateField("number", value)}
                   value={form.number}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Date facture"
                   onChange={(value) => updateField("issueDate", value)}
                   type="date"
                   value={form.issueDate}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Prénom client"
                   onChange={(value) => updateField("clientFirstName", value)}
                   value={form.clientFirstName}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Nom client"
                   onChange={(value) => updateField("clientLastName", value)}
                   value={form.clientLastName}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Prestation"
                   onChange={(value) => updateField("service", value)}
                   value={form.service}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Date du soin"
                   onChange={(value) => updateField("serviceDate", value)}
                   type="date"
                   value={form.serviceDate}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Montant"
                   onChange={(value) => updateField("amount", value)}
                   type="number"
                   value={form.amount}
                 />
                 <TextField
+                  disabled={areFieldsDisabled}
                   label="Mode de paiement"
                   onChange={(value) => updateField("method", value)}
                   value={form.method}
                 />
               </div>
 
-              <label className="flex flex-col gap-2 text-sm font-medium">
+              <label
+                className={`flex flex-col gap-2 text-sm font-medium ${
+                  isLocked ? "opacity-60" : ""
+                }`}
+              >
                 Note personnelle
                 <textarea
-                  className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                  className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                  disabled={areFieldsDisabled}
                   onChange={(event) => updateField("notes", event.target.value)}
                   value={form.notes}
                 />
@@ -409,7 +453,7 @@ export default function InvoicePage() {
               ) : null}
 
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                {hasUnsavedChanges ? (
+                {!isLocked && hasUnsavedChanges ? (
                   <button
                     className="h-12 rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50"
                     disabled={isActionDisabled}
@@ -423,21 +467,42 @@ export default function InvoicePage() {
                     Annuler les modifications
                   </button>
                 ) : null}
-                <button
-                  className="inline-flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400"
-                  disabled={isActionDisabled}
-                  onClick={openPdf}
-                  type="button"
-                >
-                  {isOpeningPdf ? "Ouverture..." : "Ouvrir le PDF"}
-                </button>
-                <button
-                  className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-                  disabled={isActionDisabled}
-                  type="submit"
-                >
-                  {isSaving ? "Enregistrement..." : "Enregistrer"}
-                </button>
+                {isLocked ? (
+                  <>
+                    <button
+                      className="inline-flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50"
+                      onClick={editInvoice}
+                      type="button"
+                    >
+                      Modifier la facture
+                    </button>
+                    <button
+                      className="inline-flex h-12 items-center justify-center rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700"
+                      onClick={downloadInvoice}
+                      type="button"
+                    >
+                      Retélécharger la facture
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="inline-flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-5 font-semibold text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400"
+                      disabled={isActionDisabled}
+                      onClick={openPdf}
+                      type="button"
+                    >
+                      {isOpeningPdf ? "Ouverture..." : "Ouvrir le PDF"}
+                    </button>
+                    <button
+                      className="h-12 rounded-xl bg-amber-600 px-5 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                      disabled={isActionDisabled}
+                      type="submit"
+                    >
+                      {isSaving ? "Enregistrement..." : "Enregistrer"}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -448,11 +513,13 @@ export default function InvoicePage() {
 }
 
 function TextField({
+  disabled = false,
   label,
   onChange,
   type = "text",
   value,
 }: {
+  disabled?: boolean;
   label: string;
   onChange: (value: string) => void;
   type?: string;
@@ -462,7 +529,8 @@ function TextField({
     <label className="flex flex-col gap-2 text-sm font-medium">
       {label}
       <input
-        className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+        className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         type={type}
         value={value}
