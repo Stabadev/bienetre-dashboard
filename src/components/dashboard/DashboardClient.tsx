@@ -13,7 +13,7 @@ type DashboardClientProps = {
   lastFetchedAt: string;
 };
 
-type SectionKey = "currentMonth" | "overdue" | "today" | "paid" | "upcoming";
+type DashboardTabKey = "today" | "currentMonth" | "overdue" | "upcoming" | "paid";
 type PaymentsByEventKey = Record<string, SavedPayment>;
 
 const PAYMENTS_BY_EVENT_KEY_STORAGE_KEY =
@@ -176,15 +176,7 @@ export function DashboardClient({
     string | undefined
   >();
   const [paymentError, setPaymentError] = useState<string | undefined>();
-  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(
-    {
-      currentMonth: true,
-      overdue: true,
-      today: true,
-      paid: true,
-      upcoming: false,
-    },
-  );
+  const [activeTab, setActiveTab] = useState<DashboardTabKey>("today");
 
   useEffect(() => {
     let isMounted = true;
@@ -311,13 +303,6 @@ export function DashboardClient({
     ? paymentsByEventKey[getEventKey(selectedEvent)]
     : undefined;
 
-  function toggleSection(section: SectionKey) {
-    setOpenSections((currentSections) => ({
-      ...currentSections,
-      [section]: !currentSections[section],
-    }));
-  }
-
   async function savePayment(event: CalendarEvent, payment: PaymentDraft) {
     setIsSavingPayment(true);
     setPaymentError(undefined);
@@ -419,6 +404,68 @@ export function DashboardClient({
     }
   }
 
+  const dashboardTabs = [
+    {
+      key: "today",
+      title: "Aujourd'hui",
+      count: todayEvents.length,
+      emptyMessage: "Aucun paiement à renseigner aujourd'hui.",
+      events: todayEvents,
+      tone: "active",
+    },
+    {
+      key: "currentMonth",
+      title: "Mois en cours",
+      count: currentMonthUnpaidEvents.length,
+      emptyMessage: "Aucun paiement à traiter pour le mois en cours.",
+      events: currentMonthUnpaidEvents,
+      tone: "active",
+    },
+    {
+      key: "overdue",
+      title: "En retard",
+      count: overdueEvents.length,
+      emptyMessage: "Aucun paiement en retard.",
+      events: overdueEvents,
+      tone: "urgent",
+    },
+    {
+      key: "upcoming",
+      title: "À venir",
+      count: upcomingEvents.length,
+      emptyMessage: "Aucun rendez-vous à venir sans paiement.",
+      events: upcomingEvents,
+      tone: "muted",
+    },
+    {
+      key: "paid",
+      title: "Payés",
+      count: paidEvents.length,
+      emptyMessage: "Aucun paiement enregistré pour le moment.",
+      events: paidEvents,
+      tone: "paid",
+      action: (
+        <button
+          className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          onClick={downloadCsv}
+          type="button"
+        >
+          Exporter CSV
+        </button>
+      ),
+    },
+  ] satisfies Array<{
+    key: DashboardTabKey;
+    title: string;
+    count: number;
+    emptyMessage: string;
+    events: CalendarEvent[];
+    tone: "urgent" | "active" | "paid" | "muted";
+    action?: ReactNode;
+  }>;
+  const activeDashboardTab =
+    dashboardTabs.find((tab) => tab.key === activeTab) ?? dashboardTabs[0];
+
   return (
     <>
       <div className="grid gap-6">
@@ -436,73 +483,52 @@ export function DashboardClient({
           message={paymentsLoadError}
         />
 
-        <DashboardSection
-          count={currentMonthUnpaidEvents.length}
-          emptyMessage="Aucun paiement à traiter pour le mois en cours."
-          events={currentMonthUnpaidEvents}
-          isOpen={openSections.currentMonth}
-          onToggle={() => toggleSection("currentMonth")}
-          onSelect={setSelectedEvent}
-          paymentsByEventKey={paymentsByEventKey}
-          tone="active"
-          title="Mois en cours"
-        />
+        <div className="-mx-1 overflow-x-auto px-1">
+          <div
+            className="flex w-max min-w-full gap-2 rounded-2xl border border-zinc-200 bg-white/70 p-1 shadow-sm"
+            role="tablist"
+          >
+            {dashboardTabs.map((tab) => {
+              const isActive = activeTab === tab.key;
+
+              return (
+                <button
+                  aria-selected={isActive}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-zinc-950 text-white shadow-sm"
+                      : "text-zinc-600 hover:bg-white hover:text-zinc-950"
+                  }`}
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  role="tab"
+                  type="button"
+                >
+                  <span>{tab.title}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      isActive
+                        ? "bg-white/15 text-white"
+                        : "bg-zinc-100 text-zinc-500"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <DashboardSection
-          count={overdueEvents.length}
-          emptyMessage="Aucun paiement en retard."
-          events={overdueEvents}
-          isOpen={openSections.overdue}
-          onToggle={() => toggleSection("overdue")}
+          action={activeDashboardTab.action}
+          count={activeDashboardTab.count}
+          emptyMessage={activeDashboardTab.emptyMessage}
+          events={activeDashboardTab.events}
           onSelect={setSelectedEvent}
           paymentsByEventKey={paymentsByEventKey}
-          tone="urgent"
-          title="En retard"
-        />
-
-        <DashboardSection
-          count={todayEvents.length}
-          emptyMessage="Aucun paiement à renseigner aujourd'hui."
-          events={todayEvents}
-          isOpen={openSections.today}
-          onToggle={() => toggleSection("today")}
-          onSelect={setSelectedEvent}
-          paymentsByEventKey={paymentsByEventKey}
-          tone="active"
-          title="Aujourd'hui"
-        />
-
-        <DashboardSection
-          action={
-            <button
-              className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-              onClick={downloadCsv}
-              type="button"
-            >
-              Exporter CSV
-            </button>
-          }
-          count={paidEvents.length}
-          emptyMessage="Aucun paiement enregistré pour le moment."
-          events={paidEvents}
-          isOpen={openSections.paid}
-          onToggle={() => toggleSection("paid")}
-          onSelect={setSelectedEvent}
-          paymentsByEventKey={paymentsByEventKey}
-          tone="paid"
-          title="Paiements enregistrés"
-        />
-
-        <DashboardSection
-          count={upcomingEvents.length}
-          emptyMessage="Aucun rendez-vous à venir sans paiement."
-          events={upcomingEvents}
-          isOpen={openSections.upcoming}
-          onToggle={() => toggleSection("upcoming")}
-          onSelect={setSelectedEvent}
-          paymentsByEventKey={paymentsByEventKey}
-          tone="muted"
-          title="À venir"
+          tone={activeDashboardTab.tone}
+          title={activeDashboardTab.title}
         />
       </div>
 
@@ -630,9 +656,7 @@ function DashboardSection({
   count,
   emptyMessage,
   events,
-  isOpen,
   onSelect,
-  onToggle,
   paymentsByEventKey,
   title,
   tone,
@@ -641,9 +665,7 @@ function DashboardSection({
   count: number;
   emptyMessage: string;
   events: CalendarEvent[];
-  isOpen: boolean;
   onSelect: (event: CalendarEvent) => void;
-  onToggle: () => void;
   paymentsByEventKey: Record<string, SavedPayment>;
   title: string;
   tone: "urgent" | "active" | "paid" | "muted";
@@ -672,29 +694,20 @@ function DashboardSection({
       className={`rounded-3xl border p-4 shadow-sm backdrop-blur sm:p-6 ${toneStyles.section}`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          className={`flex w-fit items-center gap-2 text-left text-xl font-semibold ${toneStyles.title}`}
-          onClick={onToggle}
-          type="button"
-        >
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base shadow-sm">
-            {isOpen ? "-" : "+"}
-          </span>
+        <h2 className={`text-xl font-semibold ${toneStyles.title}`}>
           <span>
             {title} ({count})
           </span>
-        </button>
+        </h2>
         {action}
       </div>
 
-      {isOpen ? (
-        <AppointmentSection
-          emptyMessage={emptyMessage}
-          events={events}
-          onSelect={onSelect}
-          paymentsByEventKey={paymentsByEventKey}
-        />
-      ) : null}
+      <AppointmentSection
+        emptyMessage={emptyMessage}
+        events={events}
+        onSelect={onSelect}
+        paymentsByEventKey={paymentsByEventKey}
+      />
     </section>
   );
 }
