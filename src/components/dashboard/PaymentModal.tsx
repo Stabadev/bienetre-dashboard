@@ -163,6 +163,7 @@ export function PaymentModal({
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const contactDisplay = getContactDisplay(clientEmail, clientPhone);
+  const isEditing = existingPayment !== undefined;
   const initialService = getInitialService(event, existingPayment);
   const [clientFirstName, setClientFirstName] = useState(
     getInitialClientFirstName(event, existingPayment),
@@ -237,7 +238,7 @@ export function PaymentModal({
                 className="text-lg font-semibold text-zinc-950"
                 id="payment-modal-title"
               >
-                {existingPayment
+                {isEditing
                   ? "Modifier le paiement"
                   : "Renseigner un paiement"}
               </h2>
@@ -379,7 +380,7 @@ export function PaymentModal({
 
         <div className="flex flex-col gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
-            {existingPayment ? (
+            {isEditing ? (
               <button
                 className="h-10 rounded-xl border border-red-200 bg-white px-4 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-300"
                 disabled={isSubmitting || isDeleting}
