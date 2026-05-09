@@ -14,6 +14,13 @@ type DashboardPageProps = {
   }>;
 };
 
+type DashboardCalendarState = {
+  events: CalendarEvent[];
+  lastFetchedAt: string;
+  isStale: boolean;
+  refreshError: string | null;
+};
+
 export default async function DashboardPage({
   searchParams,
 }: DashboardPageProps) {
@@ -28,11 +35,11 @@ export default async function DashboardPage({
     return <DashboardError message={result.message} />;
   }
 
-  return <Dashboard events={result.events} lastFetchedAt={result.lastFetchedAt} />;
+  return <Dashboard calendar={result.calendar} />;
 }
 
 async function loadEvents(forceRefresh: boolean): Promise<
-  | { ok: true; events: CalendarEvent[]; lastFetchedAt: string }
+  | { ok: true; calendar: DashboardCalendarState }
   | { ok: false; message: string }
 > {
   try {
@@ -40,8 +47,12 @@ async function loadEvents(forceRefresh: boolean): Promise<
 
     return {
       ok: true,
-      events: result.events,
-      lastFetchedAt: result.lastFetchedAt,
+      calendar: {
+        events: result.events,
+        lastFetchedAt: result.lastFetchedAt,
+        isStale: result.isStale,
+        refreshError: result.refreshError,
+      },
     };
   } catch (error) {
     return {
@@ -54,13 +65,7 @@ async function loadEvents(forceRefresh: boolean): Promise<
   }
 }
 
-function Dashboard({
-  events,
-  lastFetchedAt,
-}: {
-  events: CalendarEvent[];
-  lastFetchedAt: string;
-}) {
+function Dashboard({ calendar }: { calendar: DashboardCalendarState }) {
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -101,7 +106,12 @@ function Dashboard({
           </div>
         </header>
 
-        <DashboardClient events={events} lastFetchedAt={lastFetchedAt} />
+        <DashboardClient
+          events={calendar.events}
+          isCalendarStale={calendar.isStale}
+          lastFetchedAt={calendar.lastFetchedAt}
+          refreshError={calendar.refreshError}
+        />
       </section>
     </main>
   );

@@ -25,6 +25,8 @@ export type CalendarEvent = {
 export type CalendarEventsResult = {
   events: CalendarEvent[];
   lastFetchedAt: string;
+  isStale: boolean;
+  refreshError: string | null;
 };
 
 export class CalendarError extends Error {
@@ -296,11 +298,39 @@ async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
 
 function serializeCalendarEventsCache(
   cache: CalendarEventsCache,
+  {
+    isStale = false,
+    refreshError = null,
+  }: {
+    isStale?: boolean;
+    refreshError?: string | null;
+  } = {},
 ): CalendarEventsResult {
   return {
     events: cache.events,
     lastFetchedAt: new Date(cache.fetchedAt).toISOString(),
+    isStale,
+    refreshError,
   };
+}
+
+function getCacheAgeMinutes(cache: CalendarEventsCache, now = Date.now()): number {
+  return Math.max(0, Math.floor((now - cache.fetchedAt) / 60_000));
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Erreur Calendly inconnue.";
+}
+
+function logCalendarCache(
+  message: string,
+  cache: CalendarEventsCache | null,
+  extra?: Record<string, unknown>,
+) {
+  console.info("[calendar]", message, {
+    cacheAgeMinutes: cache ? getCacheAgeMinutes(cache) : null,
+    ...extra,
+  });
 }
 
 function refreshCalendarEventsCache(): Promise<CalendarEventsCache> {
@@ -315,8 +345,18 @@ function refreshCalendarEventsCache(): Promise<CalendarEventsCache> {
         };
 
         calendarEventsCache = nextCache;
+        logCalendarCache("refresh success", nextCache, {
+          eventCount: events.length,
+        });
 
         return nextCache;
+      })
+      .catch((error: unknown) => {
+        logCalendarCache("refresh failed", calendarEventsCache, {
+          error: getErrorMessage(error),
+        });
+
+        throw error;
       })
       .finally(() => {
         calendarEventsRefreshPromise = null;
@@ -326,12 +366,6 @@ function refreshCalendarEventsCache(): Promise<CalendarEventsCache> {
   return calendarEventsRefreshPromise;
 }
 
-function refreshCalendarEventsCacheInBackground() {
-  void refreshCalendarEventsCache().catch(() => {
-    // Keep serving the last known calendar if background refresh fails.
-  });
-}
-
 export async function getCalendarEvents({
   forceRefresh = false,
 }: {
@@ -339,11 +373,8 @@ export async function getCalendarEvents({
 } = {}): Promise<CalendarEventsResult> {
   const now = Date.now();
 
-  if (!forceRefresh && calendarEventsCache) {
-    if (calendarEventsCache.expiresAt <= now) {
-      refreshCalendarEventsCacheInBackground();
-    }
-
+  if (!forceRefresh && calendarEventsCache && calendarEventsCache.expiresAt > now) {
+    logCalendarCache("cache hit fresh", calendarEventsCache);
     return serializeCalendarEventsCache(calendarEventsCache);
   }
 
@@ -351,7 +382,17 @@ export async function getCalendarEvents({
     return serializeCalendarEventsCache(await refreshCalendarEventsCache());
   } catch (error) {
     if (calendarEventsCache) {
-      return serializeCalendarEventsCache(calendarEventsCache);
+      const refreshError = getErrorMessage(error);
+
+      logCalendarCache("fallback stale used", calendarEventsCache, {
+        error: refreshError,
+        forceRefresh,
+      });
+
+      return serializeCalendarEventsCache(calendarEventsCache, {
+        isStale: true,
+        refreshError,
+      });
     }
 
     throw error;

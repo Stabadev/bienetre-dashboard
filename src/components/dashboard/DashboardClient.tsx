@@ -11,7 +11,9 @@ import type { PaymentDraft, SavedPayment } from "./types";
 
 type DashboardClientProps = {
   events: CalendarEvent[];
+  isCalendarStale: boolean;
   lastFetchedAt: string;
+  refreshError: string | null;
 };
 
 type DashboardTabKey = "today" | "currentMonth" | "overdue" | "upcoming" | "paid";
@@ -165,7 +167,9 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 export function DashboardClient({
   events,
+  isCalendarStale,
   lastFetchedAt,
+  refreshError,
 }: DashboardClientProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [paymentsByEventKey, setPaymentsByEventKey] =
@@ -476,7 +480,11 @@ export function DashboardClient({
           todayCount={todayEvents.length}
         />
 
-        <CalendarFreshness lastFetchedAt={lastFetchedAt} />
+        <CalendarFreshness
+          isStale={isCalendarStale}
+          lastFetchedAt={lastFetchedAt}
+          refreshError={refreshError}
+        />
 
         <DashboardStatus
           isLoading={isLoadingPayments}
@@ -609,13 +617,27 @@ function SummaryCards({
   );
 }
 
-function CalendarFreshness({ lastFetchedAt }: { lastFetchedAt: string }) {
+function CalendarFreshness({
+  isStale,
+  lastFetchedAt,
+  refreshError,
+}: {
+  isStale: boolean;
+  lastFetchedAt: string;
+  refreshError: string | null;
+}) {
   const minutesSinceRefresh = getMinutesSince(lastFetchedAt);
-  const isPossiblyStale = minutesSinceRefresh >= 5;
+  const isPossiblyStale = isStale || minutesSinceRefresh >= 5;
 
   function refreshCalendar() {
     window.location.href = `/dashboard?refresh=${Date.now()}`;
   }
+
+  const message = isStale
+    ? `Refresh Calendly échoué · anciennes données d'il y a ${minutesSinceRefresh} min`
+    : isPossiblyStale
+      ? `Calendly possiblement obsolète · il y a ${minutesSinceRefresh} min`
+      : `Calendly mis à jour il y a ${minutesSinceRefresh} min`;
 
   return (
     <div
@@ -625,11 +647,7 @@ function CalendarFreshness({ lastFetchedAt }: { lastFetchedAt: string }) {
           : "text-zinc-500"
       }`}
     >
-      <p>
-        {isPossiblyStale
-          ? `Calendly possiblement obsolète · il y a ${minutesSinceRefresh} min`
-          : `Calendly mis à jour il y a ${minutesSinceRefresh} min`}
-      </p>
+      <p title={refreshError ?? undefined}>{message}</p>
       <button
         className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 bg-white/70 px-3 font-medium text-zinc-600 transition hover:border-amber-300 hover:text-zinc-900"
         onClick={refreshCalendar}
