@@ -155,7 +155,7 @@ export function InvoicePdfDocument({ invoice }: { invoice: InvoicePdfData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Image src={logoPath} style={styles.logo} />
+            <Image alt="" src={logoPath} style={styles.logo} />
             <Text style={styles.siret}>N° SIRET 495 046 021 000 46</Text>
           </View>
 
@@ -197,7 +197,7 @@ export function InvoicePdfDocument({ invoice }: { invoice: InvoicePdfData }) {
             Facture de soins N° {invoice.number}
           </Text>
           <Text style={styles.invoiceSubtitle}>
-            Prestation de services à l'attention de {invoice.clientName}
+            Prestation de services à l&apos;attention de {invoice.clientName}
           </Text>
         </View>
 
@@ -211,7 +211,7 @@ export function InvoicePdfDocument({ invoice }: { invoice: InvoicePdfData }) {
         <Text style={styles.paidBy}>(payée par {invoice.method})</Text>
 
         <View style={styles.signatureBlock}>
-          <Image src={signaturePath} style={styles.signatureImage} />
+          <Image alt="" src={signaturePath} style={styles.signatureImage} />
         </View>
 
         <Text style={styles.footer}>
