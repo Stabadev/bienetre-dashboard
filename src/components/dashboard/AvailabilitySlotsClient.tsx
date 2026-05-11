@@ -258,6 +258,23 @@ export function AvailabilitySlotsClient({
       return;
     }
 
+    const nextWeekKeys = new Set(
+      weekDays.map((day) => dateKey(addWeeks(day, 1))),
+    );
+    const nextWeekHasActiveSlots = slots.some(
+      (slot) =>
+        slot.isActive && nextWeekKeys.has(dateKey(new Date(slot.startAt))),
+    );
+
+    if (nextWeekHasActiveSlots) {
+      setErrorMessage(
+        "La semaine suivante contient déjà des disponibilités. Copie annulée pour éviter les doublons.",
+      );
+      setSuccessMessage(undefined);
+
+      return;
+    }
+
     setIsCopyingWeek(true);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
