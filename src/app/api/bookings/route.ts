@@ -228,6 +228,8 @@ export async function POST(request: Request) {
       errorName: error instanceof Error ? error.name : typeof error,
       errorStack: error instanceof Error ? error.stack : null,
       smtpFrom: process.env.SMTP_FROM ?? null,
+      smtpFromAddress: process.env.SMTP_FROM_ADDRESS ?? null,
+      smtpFromName: process.env.SMTP_FROM_NAME ?? null,
       smtpHost: process.env.SMTP_HOST ?? null,
       smtpPort: process.env.SMTP_PORT ?? null,
       smtpUser: process.env.SMTP_USER ?? null,

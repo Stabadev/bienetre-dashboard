@@ -2,11 +2,12 @@ import net from "node:net";
 import tls from "node:tls";
 
 type SmtpConfig = {
+  envelopeFrom: string;
+  fromHeader: string;
   host: string;
   port: number;
   user: string;
   password: string;
-  from: string;
 };
 
 export type SmtpEmail = {
@@ -16,31 +17,86 @@ export type SmtpEmail = {
 };
 
 function readSmtpConfig(): SmtpConfig {
-  const host = process.env.SMTP_HOST;
+  const host = readOptionalEnv("SMTP_HOST");
   const port = Number(process.env.SMTP_PORT);
-  const user = process.env.SMTP_USER;
-  const password = process.env.SMTP_PASSWORD;
-  const from = process.env.SMTP_FROM;
+  const user = readOptionalEnv("SMTP_USER");
+  const password = readOptionalEnv("SMTP_PASSWORD");
+  const legacyFrom = readOptionalEnv("SMTP_FROM");
+  const fromAddress = readOptionalEnv("SMTP_FROM_ADDRESS") ?? legacyFrom;
+  const fromName = readOptionalEnv("SMTP_FROM_NAME");
 
-  if (!host || !Number.isInteger(port) || !user || !password || !from) {
+  if (!host || !Number.isInteger(port) || !user || !password || !fromAddress) {
     throw new Error("Configuration SMTP incomplète.");
   }
 
+  const envelopeFrom = extractEmailAddress(fromAddress);
+
   return {
+    envelopeFrom,
+    fromHeader: buildFromHeader({
+      address: envelopeFrom,
+      legacyFrom,
+      name: fromName,
+    }),
     host,
     port,
     user,
     password,
-    from,
   };
+}
+
+function readOptionalEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+
+  return value ? value : undefined;
 }
 
 function sanitizeHeader(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
 }
 
+function extractEmailAddress(value: string): string {
+  const sanitizedValue = sanitizeHeader(value);
+  const addressMatch = sanitizedValue.match(/<([^<>]+)>/);
+
+  return (addressMatch?.[1] ?? sanitizedValue).trim();
+}
+
 function formatAddress(value: string): string {
   return `<${sanitizeHeader(value)}>`;
+}
+
+function formatMailbox({ address, name }: { address: string; name?: string }) {
+  const sanitizedName = name ? sanitizeHeader(name) : "";
+
+  if (!sanitizedName) {
+    return formatAddress(address);
+  }
+
+  return `${sanitizedName} ${formatAddress(address)}`;
+}
+
+function buildFromHeader({
+  address,
+  legacyFrom,
+  name,
+}: {
+  address: string;
+  legacyFrom?: string;
+  name?: string;
+}) {
+  const sanitizedName = name ? sanitizeHeader(name) : "";
+  const sanitizedLegacyFrom = legacyFrom ? sanitizeHeader(legacyFrom) : "";
+
+  if (sanitizedName) {
+    return formatMailbox({ address, name: sanitizedName });
+  }
+
+  if (sanitizedLegacyFrom.includes("<") && sanitizedLegacyFrom.includes(">")) {
+    return sanitizedLegacyFrom;
+  }
+
+  return formatMailbox({ address });
 }
 
 function buildMessage({
@@ -55,7 +111,7 @@ function buildMessage({
   text: string;
 }) {
   return [
-    `From: ${formatAddress(from)}`,
+    `From: ${from}`,
     `To: ${formatAddress(to)}`,
     `Subject: ${sanitizeHeader(subject)}`,
     "MIME-Version: 1.0",
@@ -184,7 +240,7 @@ export async function sendSmtpEmail(email: SmtpEmail) {
   const socket = await connectSmtp(config);
   const connection = new SmtpConnection(socket, config.host);
   const message = buildMessage({
-    from: config.from,
+    from: config.fromHeader,
     subject: email.subject,
     text: email.text,
     to: email.to,
@@ -205,7 +261,9 @@ export async function sendSmtpEmail(email: SmtpEmail) {
       Buffer.from(config.password).toString("base64"),
       ["235"],
     );
-    await connection.command(`MAIL FROM:${formatAddress(config.from)}`, ["250"]);
+    await connection.command(`MAIL FROM:${formatAddress(config.envelopeFrom)}`, [
+      "250",
+    ]);
     await connection.command(`RCPT TO:${formatAddress(email.to)}`, ["250", "251"]);
     await connection.command("DATA", ["354"]);
     await connection.command(`${message}\r\n.`, ["250"]);
