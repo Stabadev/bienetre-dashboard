@@ -11,6 +11,24 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+function serializeAvailabilitySlot(slot: {
+  id: string;
+  startAt: Date;
+  endAt: Date;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    ...slot,
+    startAt: slot.startAt.toISOString(),
+    endAt: slot.endAt.toISOString(),
+    createdAt: slot.createdAt.toISOString(),
+    updatedAt: slot.updatedAt.toISOString(),
+  };
+}
+
 function serializeBooking(booking: {
   id: string;
   source: BookingSource;
@@ -45,11 +63,21 @@ export default async function InternalBookingsPage() {
     redirect("/login");
   }
 
-  const bookings = await db.booking.findMany({
-    orderBy: {
-      startAt: "asc",
-    },
-  });
+  const [availabilitySlots, bookings] = await Promise.all([
+    db.availabilitySlot.findMany({
+      orderBy: {
+        startAt: "asc",
+      },
+      where: {
+        isActive: true,
+      },
+    }),
+    db.booking.findMany({
+      orderBy: {
+        startAt: "asc",
+      },
+    }),
+  ]);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
@@ -60,10 +88,10 @@ export default async function InternalBookingsPage() {
               Administration
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Réservations internes
+              Agenda des réservations
             </h1>
             <p className="mt-2 text-zinc-600">
-              Demandes issues de la réservation publique DEV.
+              Rendez-vous confirmés et demandes en attente.
             </p>
           </div>
 
@@ -78,7 +106,12 @@ export default async function InternalBookingsPage() {
           </div>
         </header>
 
-        <InternalBookingsClient initialBookings={bookings.map(serializeBooking)} />
+        <InternalBookingsClient
+          initialAvailabilitySlots={availabilitySlots.map(
+            serializeAvailabilitySlot,
+          )}
+          initialBookings={bookings.map(serializeBooking)}
+        />
       </section>
     </main>
   );
