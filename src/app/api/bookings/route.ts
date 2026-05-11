@@ -5,6 +5,7 @@ import {
   getBookingConfirmationUrl,
   sendBookingConfirmationEmail,
 } from "@/lib/booking-confirmation";
+import { requireAuthResponse } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 const allowedDurations = new Set([60, 90]);
@@ -47,20 +48,56 @@ function isValidEmail(value: string): boolean {
 
 function serializeBooking(booking: {
   id: string;
+  source?: BookingSource;
   status: BookingStatus;
+  clientFirstName?: string | null;
+  clientLastName?: string | null;
+  clientName?: string;
+  clientEmail?: string;
+  clientPhone?: string | null;
+  clientMessage?: string | null;
   startAt: Date;
   endAt: Date;
   service: string | null;
+  confirmedAt?: Date | null;
+  cancelledAt?: Date | null;
   createdAt: Date;
+  updatedAt?: Date;
 }) {
   return {
     id: booking.id,
+    source: booking.source,
     status: booking.status,
+    clientFirstName: booking.clientFirstName,
+    clientLastName: booking.clientLastName,
+    clientName: booking.clientName,
+    clientEmail: booking.clientEmail,
+    clientPhone: booking.clientPhone,
+    clientMessage: booking.clientMessage,
     startAt: booking.startAt.toISOString(),
     endAt: booking.endAt.toISOString(),
     service: booking.service,
+    confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+    cancelledAt: booking.cancelledAt?.toISOString() ?? null,
     createdAt: booking.createdAt.toISOString(),
+    updatedAt: booking.updatedAt?.toISOString(),
   };
+}
+
+export async function GET() {
+  const authResponse = await requireAuthResponse();
+
+  if (authResponse) {
+    return authResponse;
+  }
+
+  const bookings = await db.booking.findMany({
+    orderBy: {
+      startAt: "asc",
+    },
+  });
+
+  return NextResponse.json(bookings.map(serializeBooking));
 }
 
 export async function POST(request: Request) {
