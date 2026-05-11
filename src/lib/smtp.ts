@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import net from "node:net";
 import tls from "node:tls";
 
@@ -11,6 +12,7 @@ type SmtpConfig = {
 };
 
 export type SmtpEmail = {
+  html?: string;
   to: string;
   subject: string;
   text: string;
@@ -99,26 +101,57 @@ function buildFromHeader({
   return formatMailbox({ address });
 }
 
+function normalizeMessageBody(value: string): string {
+  return value.replace(/\r?\n/g, "\r\n");
+}
+
 function buildMessage({
   from,
+  html,
   to,
   subject,
   text,
 }: {
   from: string;
+  html?: string;
   to: string;
   subject: string;
   text: string;
 }) {
-  return [
+  const headers = [
     `From: ${from}`,
     `To: ${formatAddress(to)}`,
     `Subject: ${sanitizeHeader(subject)}`,
     "MIME-Version: 1.0",
+  ];
+
+  if (html) {
+    const boundary = `bienetre-${crypto.randomUUID()}`;
+
+    return [
+      ...headers,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      normalizeMessageBody(text),
+      `--${boundary}`,
+      "Content-Type: text/html; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      normalizeMessageBody(html),
+      `--${boundary}--`,
+    ].join("\r\n");
+  }
+
+  return [
+    ...headers,
     "Content-Type: text/plain; charset=utf-8",
     "Content-Transfer-Encoding: 8bit",
     "",
-    text,
+    normalizeMessageBody(text),
   ].join("\r\n");
 }
 
@@ -241,6 +274,7 @@ export async function sendSmtpEmail(email: SmtpEmail) {
   const connection = new SmtpConnection(socket, config.host);
   const message = buildMessage({
     from: config.fromHeader,
+    html: email.html,
     subject: email.subject,
     text: email.text,
     to: email.to,
