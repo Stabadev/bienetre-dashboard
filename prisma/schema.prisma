@@ -48,6 +48,8 @@ model Booking {
   service            String?
   startAt            DateTime
   endAt              DateTime
+  confirmationTokenHash      String?   @unique
+  confirmationTokenExpiresAt DateTime?
   confirmedAt        DateTime?
   cancelledAt        DateTime?
   createdAt          DateTime          @default(now())
@@ -57,6 +59,7 @@ model Booking {
   @@index([source, startAt])
   @@index([status, startAt])
   @@index([clientEmail])
+  @@index([confirmationTokenExpiresAt])
 }
 
 model Payment {

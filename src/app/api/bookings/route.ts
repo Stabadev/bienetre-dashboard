@@ -1,5 +1,10 @@
 import { BookingStatus, BookingSource } from "@prisma/client";
 import { NextResponse } from "next/server";
+import {
+  createBookingConfirmationToken,
+  getBookingConfirmationUrl,
+  sendBookingConfirmationEmail,
+} from "@/lib/booking-confirmation";
 import { db } from "@/lib/db";
 
 const allowedDurations = new Set([60, 90]);
@@ -141,6 +146,7 @@ export async function POST(request: Request) {
     );
   }
 
+  const confirmation = createBookingConfirmationToken();
   const booking = await db.booking.create({
     data: {
       availabilitySlotId: availabilitySlot.id,
@@ -155,6 +161,8 @@ export async function POST(request: Request) {
       service,
       startAt,
       endAt,
+      confirmationTokenHash: confirmation.tokenHash,
+      confirmationTokenExpiresAt: confirmation.expiresAt,
     },
     select: {
       id: true,
@@ -165,6 +173,40 @@ export async function POST(request: Request) {
       createdAt: true,
     },
   });
+
+  try {
+    await sendBookingConfirmationEmail({
+      clientEmail,
+      clientName,
+      confirmationUrl: getBookingConfirmationUrl(confirmation.token),
+      endAt,
+      service,
+      startAt,
+    });
+  } catch (error) {
+    console.error("[bookings] confirmation email failed", {
+      appBaseUrl: process.env.APP_BASE_URL ?? null,
+      errorMessage:
+        error instanceof Error ? error.message : "Erreur SMTP inconnue.",
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorStack: error instanceof Error ? error.stack : null,
+      smtpFrom: process.env.SMTP_FROM ?? null,
+      smtpHost: process.env.SMTP_HOST ?? null,
+      smtpPort: process.env.SMTP_PORT ?? null,
+      smtpUser: process.env.SMTP_USER ?? null,
+    });
+
+    await db.booking.delete({
+      where: {
+        id: booking.id,
+      },
+    });
+
+    return NextResponse.json(
+      { error: "Impossible d'envoyer l'email de confirmation." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json(serializeBooking(booking), { status: 201 });
 }

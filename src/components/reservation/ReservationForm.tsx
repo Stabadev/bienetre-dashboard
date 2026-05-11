@@ -226,7 +226,8 @@ export function ReservationForm({ availabilitySlots }: ReservationFormProps) {
         {createdBooking ? (
           <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
             Demande enregistrée pour le {formatDate(createdBooking.startAt)} à{" "}
-            {formatTime(createdBooking.startAt)}.
+            {formatTime(createdBooking.startAt)}. Un email de confirmation vient
+            d&apos;être envoyé.
           </p>
         ) : null}
 
