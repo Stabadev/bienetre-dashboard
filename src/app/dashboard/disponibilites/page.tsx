@@ -38,7 +38,7 @@ export default async function AvailabilitySlotsPage() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
-      <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
