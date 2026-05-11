@@ -44,6 +44,7 @@ model Booking {
   clientName         String
   clientEmail        String
   clientPhone        String?
+  clientMessage      String?
   service            String?
   startAt            DateTime
   endAt              DateTime
