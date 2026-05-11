@@ -6,6 +6,59 @@ datasource db {
   provider = "postgresql"
 }
 
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum BookingSource {
+  INTERNAL
+  CALENDLY
+  ADMIN
+}
+
+model AvailabilitySlot {
+  id        String    @id @default(cuid())
+  startAt   DateTime
+  endAt     DateTime
+  isActive  Boolean   @default(true)
+  capacity  Int       @default(1)
+  notes     String?
+  bookings  Booking[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([startAt])
+  @@index([isActive, startAt])
+}
+
+model Booking {
+  id                 String            @id @default(cuid())
+  availabilitySlotId String?
+  availabilitySlot   AvailabilitySlot? @relation(fields: [availabilitySlotId], references: [id], onDelete: SetNull)
+  source             BookingSource     @default(INTERNAL)
+  status             BookingStatus     @default(PENDING)
+  clientFirstName    String?
+  clientLastName     String?
+  clientName         String
+  clientEmail        String
+  clientPhone        String?
+  service            String?
+  startAt            DateTime
+  endAt              DateTime
+  confirmedAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([availabilitySlotId])
+  @@index([source, startAt])
+  @@index([status, startAt])
+  @@index([clientEmail])
+}
+
 model Payment {
   id                 String   @id @default(cuid())
   appointmentUid     String   @unique
