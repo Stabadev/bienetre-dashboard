@@ -1,21 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
+import { BookingStatus } from "@prisma/client";
 import { ReservationForm } from "@/components/reservation/ReservationForm";
 import { db } from "@/lib/db";
+import { buildAvailableReservationTimes } from "@/lib/reservation-availability";
 
 export const dynamic = "force-dynamic";
-
-function serializeAvailabilitySlot(slot: {
-  id: string;
-  startAt: Date;
-  endAt: Date;
-}) {
-  return {
-    id: slot.id,
-    startAt: slot.startAt.toISOString(),
-    endAt: slot.endAt.toISOString(),
-  };
-}
 
 export default async function ReservationPage() {
   const now = new Date();
@@ -35,6 +25,31 @@ export default async function ReservationPage() {
       endAt: true,
     },
   });
+  const blockingBookings = await db.booking.findMany({
+    where: {
+      endAt: {
+        gt: now,
+      },
+      status: {
+        in: [BookingStatus.PENDING, BookingStatus.CONFIRMED],
+      },
+    },
+    orderBy: {
+      startAt: "asc",
+    },
+    select: {
+      startAt: true,
+      endAt: true,
+    },
+  });
+  const availableTimes = [60, 90].flatMap((durationMinutes) =>
+    buildAvailableReservationTimes({
+      availabilitySlots,
+      blockingBookings,
+      durationMinutes,
+      now,
+    }),
+  );
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_48%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
@@ -70,7 +85,7 @@ export default async function ReservationPage() {
         </header>
 
         <ReservationForm
-          availabilitySlots={availabilitySlots.map(serializeAvailabilitySlot)}
+          availableTimes={availableTimes}
         />
       </section>
     </main>
