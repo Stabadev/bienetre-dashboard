@@ -4,13 +4,13 @@
 
 Bien-être Dashboard est un outil métier conçu pour une praticienne en médecine chinoise / bien-être.
 
-L'application permet de suivre les rendez-vous et les paiements associés. Les rendez-vous viennent d'un agenda Google Calendar existant, lu via une URL iCal privée côté serveur.
+L'application permet de suivre les rendez-vous et les paiements associés. Les rendez-vous viennent actuellement de Calendly, lu côté serveur via l'API Calendly.
 
-L'application ne crée, ne modifie et ne supprime aucun rendez-vous Google Calendar. Elle ajoute une couche métier au-dessus de l'agenda : suivi des paiements, modification/suppression des paiements enregistrés, et export CSV.
+L'application ne crée, ne modifie et ne supprime aucun rendez-vous Calendly. Elle ajoute une couche métier au-dessus de Calendly : suivi des paiements, modification/suppression des paiements enregistrés, factures PDF et export CSV.
 
 ## 2. Fonctionnalités actuelles
 
-- Lecture des rendez-vous Google Calendar via iCal, serveur uniquement.
+- Lecture des rendez-vous Calendly via l'API Calendly, serveur uniquement.
 - Dashboard protégé par authentification admin.
 - Affichage des rendez-vous dans une interface responsive mobile-first.
 - Tri des rendez-vous :
@@ -27,7 +27,7 @@ L'application ne crée, ne modifie et ne supprime aucun rendez-vous Google Calen
 - Prestations disponibles :
   - Première séance — 75 euros ;
   - Séance d'entretien — 60 euros.
-- Suppression d'un paiement sans supprimer le rendez-vous Google Calendar.
+- Suppression d'un paiement sans supprimer le rendez-vous Calendly.
 - Export CSV compatible Excel / LibreOffice :
   - BOM UTF-8 ;
   - séparateur `;`.
@@ -54,8 +54,8 @@ L'application ne crée, ne modifie et ne supprime aucun rendez-vous Google Calen
 Flux principal :
 
 ```text
-Google Calendar
-  -> iCal privé
+Calendly
+  -> API Calendly côté serveur
   -> serveur Next.js
   -> dashboard
   -> API Next.js
@@ -65,10 +65,12 @@ Google Calendar
 
 Principes importants :
 
-- L'URL iCal est lue uniquement côté serveur.
-- Le navigateur ne reçoit jamais l'URL iCal.
-- Google Calendar est utilisé en lecture seule.
+- Le token Calendly est lu uniquement côté serveur.
+- Le navigateur ne reçoit jamais le token Calendly.
+- Calendly est utilisé comme source actuelle des rendez-vous.
+- Calendly est utilisé en lecture seule par l'application.
 - Les paiements sont les seules données métier persistées dans PostgreSQL.
+- La réservation interne est un chantier futur, prévu d'abord sur l'environnement DEV, sans remplacement immédiat de Calendly.
 
 ## 5. Routes
 
@@ -99,18 +101,22 @@ Créer un fichier `.env.local` à la racine du projet.
 Exemple :
 
 ```env
-ICAL_SECRET_URL=""
+CALENDLY_TOKEN=""
 DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD_HASH=""
 SESSION_SECRET=""
 ```
 
+### `CALENDLY_TOKEN`
+
+Token d'accès personnel Calendly utilisé par le serveur pour récupérer les rendez-vous.
+
+Il doit rester secret et côté serveur. Ne jamais le préfixer avec `NEXT_PUBLIC_`.
+
 ### `ICAL_SECRET_URL`
 
-URL iCal privée Google Calendar.
-
-Elle doit rester secrète et côté serveur. Ne jamais la préfixer avec `NEXT_PUBLIC_`.
+Ancienne variable utilisée par l'intégration Google Calendar/iCal. Elle ne correspond plus à l'intégration actuelle et ne doit pas être utilisée pour les nouveaux développements.
 
 ### `DATABASE_URL`
 
@@ -227,7 +233,7 @@ Le MVP est terminé et fonctionnel.
 Il permet :
 
 - de se connecter en admin ;
-- de consulter les rendez-vous Google Calendar importés via iCal ;
+- de consulter les rendez-vous Calendly importés côté serveur ;
 - de renseigner, modifier et supprimer des paiements ;
 - de visualiser un récapitulatif ;
 - d'exporter les paiements en CSV ;
@@ -278,7 +284,7 @@ Sur le VPS, chaque instance possède son propre dossier et son propre fichier `.
 Variables attendues :
 
 ```env
-ICAL_SECRET_URL="https://calendar.google.com/calendar/ical/..."
+CALENDLY_TOKEN="..."
 DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard"
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD_HASH="\$2b\$12\$..."
@@ -293,7 +299,7 @@ Important :
 - `DATABASE_URL` doit utiliser l'hôte `db` sur le VPS, car PostgreSQL tourne dans le réseau Docker interne ;
 - `POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` doivent correspondre à `DATABASE_URL` ;
 - ne jamais commit de vrais secrets ;
-- ne jamais préfixer `ICAL_SECRET_URL` avec `NEXT_PUBLIC_`.
+- ne jamais préfixer `CALENDLY_TOKEN` avec `NEXT_PUBLIC_`.
 
 ### 9.4 Déploiement dev VPS
 
@@ -421,10 +427,13 @@ docker compose -f docker-compose.prod.yml config
 
 ## 10. Notes importantes
 
-- L'iCal est utilisé en lecture seule.
+- Calendly est la source actuelle des rendez-vous et reste utilisé en lecture seule.
 - Les paiements sont stockés en base PostgreSQL.
-- L'URL iCal est secrète et doit rester côté serveur.
+- Le token Calendly est secret et doit rester côté serveur.
+- `Payment.appointmentUid` est une clé métier unique liée au rendez-vous affiché dans le dashboard.
+- Les routes de facture sous `/api/payments/[appointmentUid]/invoice` gardent un segment nommé `[appointmentUid]`, mais reçoivent en pratique un `Payment.id`. Ce nom est conservé pour compatibilité et ne doit pas être renommé dans une simple passe documentaire.
+- La réservation interne est un chantier futur DEV. Elle ne remplace pas Calendly à ce stade, n'est pas intégrée dans WordPress et n'a pas encore de modèle Prisma dédié.
 - Le projet est conçu pour pouvoir évoluer vers un SaaS.
 - Attention aux ports si plusieurs applications Docker tournent sur le VPS.
-- L'application ne remplace pas Google Calendar : elle ajoute une couche de suivi métier.
+- L'application ne remplace pas Calendly : elle ajoute une couche de suivi métier.
 - L'export CSV reflète les paiements enregistrés dans PostgreSQL.

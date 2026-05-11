@@ -10,12 +10,12 @@ const helpSections = [
   {
     title: "D'où viennent les rendez-vous ?",
     content:
-      "Les rendez-vous viennent d'un agenda Google Calendar existant, lu via un lien iCal privé. L'application lit l'agenda, mais ne modifie jamais Google Calendar.",
+      "Les rendez-vous viennent actuellement de Calendly, lu côté serveur via l'API Calendly. L'application lit Calendly, mais ne le modifie jamais.",
   },
   {
     title: "Que se passe-t-il quand j'enregistre un paiement ?",
     content:
-      "Le paiement est sauvegardé dans la base de l'application. Le rendez-vous Google Calendar reste inchangé.",
+      "Le paiement est sauvegardé dans la base de l'application. Le rendez-vous Calendly reste inchangé.",
   },
   {
     title: "Puis-je modifier un paiement ?",
@@ -25,7 +25,7 @@ const helpSections = [
   {
     title: "Puis-je supprimer un paiement ?",
     content:
-      "Oui. La suppression efface uniquement le paiement enregistré dans l'application. Le rendez-vous Google Calendar n'est jamais supprimé.",
+      "Oui. La suppression efface uniquement le paiement enregistré dans l'application. Le rendez-vous Calendly n'est jamais supprimé.",
   },
   {
     title: "Comment fonctionne l'export CSV ?",
@@ -35,12 +35,12 @@ const helpSections = [
   {
     title: "Confidentialité",
     content:
-      "L'URL iCal reste côté serveur et n'est pas affichée dans le navigateur. L'accès au dashboard est protégé par une connexion admin.",
+      "Le token Calendly reste côté serveur et n'est pas affiché dans le navigateur. L'accès au dashboard est protégé par une connexion admin.",
   },
   {
     title: "Limites de cette version",
     content:
-      "Cette version ne permet pas de créer un rendez-vous, de modifier Google Calendar, de gérer un paiement en ligne ou de maintenir une fiche client complète.",
+      "Cette version ne permet pas de créer un rendez-vous interne, de modifier Calendly, de gérer un paiement en ligne ou de maintenir une fiche client complète.",
   },
 ];
 
