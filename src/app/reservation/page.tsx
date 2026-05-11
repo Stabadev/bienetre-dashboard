@@ -1,59 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BookingStatus } from "@prisma/client";
-import { ReservationForm } from "@/components/reservation/ReservationForm";
-import { db } from "@/lib/db";
-import { buildAvailableReservationTimes } from "@/lib/reservation-availability";
+import { reservationServices } from "@/lib/reservation-services";
 
-export const dynamic = "force-dynamic";
-
-export default async function ReservationPage() {
-  const now = new Date();
-  const availabilitySlots = await db.availabilitySlot.findMany({
-    where: {
-      isActive: true,
-      endAt: {
-        gt: now,
-      },
-    },
-    orderBy: {
-      startAt: "asc",
-    },
-    select: {
-      id: true,
-      startAt: true,
-      endAt: true,
-    },
-  });
-  const blockingBookings = await db.booking.findMany({
-    where: {
-      endAt: {
-        gt: now,
-      },
-      status: {
-        in: [BookingStatus.PENDING, BookingStatus.CONFIRMED],
-      },
-    },
-    orderBy: {
-      startAt: "asc",
-    },
-    select: {
-      startAt: true,
-      endAt: true,
-    },
-  });
-  const availableTimes = [60, 90].flatMap((durationMinutes) =>
-    buildAvailableReservationTimes({
-      availabilitySlots,
-      blockingBookings,
-      durationMinutes,
-      now,
-    }),
-  );
+export default function ReservationChoicePage() {
+  const services = Object.values(reservationServices);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_48%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
-      <section className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-8">
         <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Image
@@ -68,11 +22,11 @@ export default async function ReservationPage() {
               Réservation DEV
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Demander un rendez-vous
+              Choisir un parcours
             </h1>
             <p className="mt-2 max-w-2xl text-zinc-600">
-              Choisissez une durée, une date et une heure dans une plage
-              disponible. La demande sera enregistrée en attente de validation.
+              Sélectionnez le type de rendez-vous souhaité. La durée sera
+              appliquée automatiquement.
             </p>
           </div>
 
@@ -84,9 +38,25 @@ export default async function ReservationPage() {
           </Link>
         </header>
 
-        <ReservationForm
-          availableTimes={availableTimes}
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {services.map((service) => (
+            <Link
+              className="rounded-2xl border border-white/70 bg-white/85 p-6 shadow-sm transition hover:border-amber-300 hover:bg-white"
+              href={service.path}
+              key={service.path}
+            >
+              <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                {service.shortLabel}
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+                {service.label}
+              </h2>
+              <p className="mt-3 leading-7 text-zinc-600">
+                {service.description}
+              </p>
+            </Link>
+          ))}
+        </div>
       </section>
     </main>
   );

@@ -5,6 +5,9 @@ import { formatDate, formatTime } from "@/components/dashboard/formatters";
 
 type ReservationFormProps = {
   availableTimes: AvailableReservationTimeView[];
+  fixedDurationMinutes?: 60 | 90;
+  serviceDescription?: string;
+  serviceLabel?: string;
 };
 
 type AvailableReservationTimeView = {
@@ -108,9 +111,14 @@ function overlapsBooking({
 
 export function ReservationForm({
   availableTimes: initialAvailableTimes,
+  fixedDurationMinutes,
+  serviceDescription,
+  serviceLabel,
 }: ReservationFormProps) {
   const [availableTimes, setAvailableTimes] = useState(initialAvailableTimes);
-  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(60);
+  const durationMinutes = fixedDurationMinutes ?? selectedDurationMinutes;
+  const isDurationFixed = fixedDurationMinutes !== undefined;
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [selectedStartAt, setSelectedStartAt] = useState("");
   const [clientFirstName, setClientFirstName] = useState("");
@@ -226,43 +234,57 @@ export function ReservationForm({
         onSubmit={submitReservation}
       >
         <div className="grid gap-5">
-          <fieldset>
-            <legend className="text-sm font-semibold">Durée de séance</legend>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {durationOptions.map((option) => {
-                const isSelected = durationMinutes === option.value;
+          {isDurationFixed ? (
+            <section className="rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+              <p className="text-sm font-semibold text-amber-950">
+                {serviceLabel ?? "Séance"} ·{" "}
+                {durationMinutes === 90 ? "1h30" : "1h"}
+              </p>
+              {serviceDescription ? (
+                <p className="mt-2 text-sm leading-6 text-zinc-700">
+                  {serviceDescription}
+                </p>
+              ) : null}
+            </section>
+          ) : (
+            <fieldset>
+              <legend className="text-sm font-semibold">Durée de séance</legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {durationOptions.map((option) => {
+                  const isSelected = durationMinutes === option.value;
 
-                return (
-                  <button
-                    aria-pressed={isSelected}
-                    className={`h-11 rounded-xl border px-4 text-sm font-semibold transition ${
-                      isSelected
-                        ? "border-amber-600 bg-amber-600 text-white"
-                        : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
-                    }`}
-                    key={option.value}
-                    onClick={() => {
-                      setDurationMinutes(option.value);
-                      setSelectedDateKey("");
-                      setSelectedStartAt("");
-                      setCreatedBooking(undefined);
-                      setErrorMessage(undefined);
-                    }}
-                    type="button"
-                  >
-                    <span className="block">{option.label}</span>
-                    <span
-                      className={`mt-0.5 block text-xs font-medium ${
-                        isSelected ? "text-amber-50" : "text-zinc-500"
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className={`h-11 rounded-xl border px-4 text-sm font-semibold transition ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-600 text-white"
+                          : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
                       }`}
+                      key={option.value}
+                      onClick={() => {
+                        setSelectedDurationMinutes(option.value);
+                        setSelectedDateKey("");
+                        setSelectedStartAt("");
+                        setCreatedBooking(undefined);
+                        setErrorMessage(undefined);
+                      }}
+                      type="button"
                     >
-                      {option.description}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
+                      <span className="block">{option.label}</span>
+                      <span
+                        className={`mt-0.5 block text-xs font-medium ${
+                          isSelected ? "text-amber-50" : "text-zinc-500"
+                        }`}
+                      >
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
 
           <fieldset>
             <legend className="text-sm font-semibold">
