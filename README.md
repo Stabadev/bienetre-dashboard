@@ -1,85 +1,102 @@
 # Bien-être Dashboard
 
-## 1. Présentation du projet
+## 1. Présentation
 
-Bien-être Dashboard est un outil métier conçu pour une praticienne en médecine chinoise / bien-être.
+Bien-être Dashboard est un outil métier conçu pour Julie, praticienne
+bien-être.
 
-L'application permet de suivre les rendez-vous et les paiements associés. Les rendez-vous viennent actuellement de Calendly, lu côté serveur via l'API Calendly.
+L'application contient aujourd'hui deux flux de rendez-vous :
 
-L'application ne crée, ne modifie et ne supprime aucun rendez-vous Calendly. Elle ajoute une couche métier au-dessus de Calendly : suivi des paiements, modification/suppression des paiements enregistrés, factures PDF et export CSV.
+- un flux Calendly historique, utilisé pour le dashboard principal, les
+  paiements, les factures PDF et l'export CSV ;
+- un flux de réservation interne, utilisé pour gérer des disponibilités,
+  recevoir des demandes de rendez-vous, confirmer par email et afficher un
+  agenda admin dédié.
 
-## 2. Fonctionnalités actuelles
+Ces deux flux coexistent. La réservation interne ne remplace pas encore
+Calendly et n'est pas encore reliée aux paiements, factures ou exports.
 
-- Lecture des rendez-vous Calendly via l'API Calendly, serveur uniquement.
-- Dashboard protégé par authentification admin.
-- Affichage des rendez-vous dans une interface responsive mobile-first.
-- Tri des rendez-vous :
-  - paiements à renseigner en haut ;
-  - paiements enregistrés en bas.
-- Filtrage des rendez-vous affichés :
-  - tous les rendez-vous passés ;
-  - plus les 7 prochains jours glissants.
-- Modal de paiement :
-  - choix de prestation ;
-  - montant prérempli selon la prestation ;
-  - montant modifiable manuellement ;
-  - modification possible d'un paiement existant.
-- Prestations disponibles :
-  - Première séance — 75 euros ;
-  - Séance d'entretien — 60 euros.
-- Suppression d'un paiement sans supprimer le rendez-vous Calendly.
-- Export CSV compatible Excel / LibreOffice :
-  - BOM UTF-8 ;
-  - séparateur `;`.
-- Authentification admin simple :
-  - un seul compte ;
-  - mot de passe hashé avec bcrypt ;
-  - session signée via cookie `httpOnly`.
-- Protection des routes API sensibles.
-- Page d'aide.
-- Design moderne, sobre et responsive.
-
-## 3. Stack technique
+## 2. Stack
 
 - Next.js App Router
+- React
 - TypeScript
 - Tailwind CSS
 - Prisma
-- PostgreSQL via Docker
+- PostgreSQL
+- Docker Compose
 - bcryptjs
 - jose
+- SMTP maison
+- @react-pdf/renderer
 
-## 4. Architecture
+## 3. Fonctionnalités existantes
 
-Flux principal :
+### Calendly, paiements, factures et export
 
-```text
-Calendly
-  -> API Calendly côté serveur
-  -> serveur Next.js
-  -> dashboard
-  -> API Next.js
-  -> Prisma
-  -> PostgreSQL
-```
+- Lecture des rendez-vous Calendly côté serveur via l'API Calendly.
+- Dashboard admin protégé sur `/dashboard`.
+- Suivi des paiements associés aux rendez-vous Calendly.
+- Création et modification de paiements.
+- Suppression d'un paiement sans supprimer le rendez-vous Calendly.
+- Factures PDF liées aux paiements.
+- Export CSV des paiements.
 
-Principes importants :
+Calendly est lu en lecture seule. L'application ne crée, ne modifie et ne
+supprime aucun rendez-vous Calendly.
 
-- Le token Calendly est lu uniquement côté serveur.
-- Le navigateur ne reçoit jamais le token Calendly.
-- Calendly est utilisé comme source actuelle des rendez-vous.
-- Calendly est utilisé en lecture seule par l'application.
-- Les paiements sont les seules données métier persistées dans PostgreSQL.
-- La réservation interne est un chantier futur, prévu d'abord sur l'environnement DEV, sans remplacement immédiat de Calendly.
+### Réservation interne
 
-## 5. Routes
+- Gestion des plages de disponibilité via `/dashboard/disponibilites`.
+- Réservation publique via `/reservation`.
+- Parcours dédiés :
+  - `/reservation/premier-rdv` pour un rendez-vous de 1h30 ;
+  - `/reservation/suivi` pour un rendez-vous de 1h.
+- Calcul automatique des horaires disponibles.
+- Anti-chevauchement côté backend.
+- Création de `Booking` en statut `PENDING`.
+- Email de confirmation avec token.
+- Page publique `/reservation/confirmer`.
+- Agenda admin des réservations internes via `/dashboard/reservations`.
 
-Pages :
+### Admin Julie
+
+Julie peut aujourd'hui :
+
+- se connecter à l'admin ;
+- consulter le dashboard Calendly historique ;
+- saisir et modifier des paiements Calendly ;
+- générer des factures liées aux paiements ;
+- exporter les paiements en CSV ;
+- ouvrir ou supprimer des plages de disponibilité ;
+- copier une semaine de disponibilités vers la suivante, avec blocage si la
+  semaine suivante contient déjà des disponibilités ;
+- consulter les réservations internes dans un agenda hebdomadaire ;
+- voir les disponibilités en fond dans l'agenda des réservations ;
+- confirmer manuellement une demande ;
+- marquer une réservation comme annulée.
+
+## 4. Routes principales
+
+Pages publiques :
 
 ```text
 GET /
 GET /login
+GET /reservation
+GET /reservation/premier-rdv
+GET /reservation/suivi
+GET /reservation/confirmer
+```
+
+Pages admin protégées :
+
+```text
 GET /dashboard
+GET /dashboard/disponibilites
+GET /dashboard/reservations
+GET /dashboard/export
+GET /dashboard/payments/[paymentId]/invoice
 GET /help
 ```
 
@@ -88,97 +105,226 @@ API :
 ```text
 POST   /api/login
 POST   /api/logout
+
 GET    /api/payments
 POST   /api/payments
 DELETE /api/payments/[appointmentUid]
+
+GET    /api/payments/[appointmentUid]/invoice
+POST   /api/payments/[appointmentUid]/invoice
+GET    /api/payments/[appointmentUid]/invoice/pdf
+GET    /api/invoices/next-number
+
 GET    /api/export
+
+GET    /api/availability-slots
+POST   /api/availability-slots
+DELETE /api/availability-slots/[slotId]
+
+GET    /api/bookings
+POST   /api/bookings
+PATCH  /api/bookings/[bookingId]
 ```
 
-## 6. Variables d'environnement
+`POST /api/bookings` est public car il sert au formulaire de réservation.
+`GET /api/bookings` et `PATCH /api/bookings/[bookingId]` sont protégés.
 
-Créer un fichier `.env.local` à la racine du projet.
+## 5. Modèles Prisma
 
-Exemple :
+Le schéma se trouve dans `prisma/schema.prisma`.
+
+### `Payment`
+
+Représente la couche paiement/comptabilité historique.
+
+Il est encore lié au flux Calendly via :
+
+- `appointmentUid`
+- `calendlyEventUri`
+- `calendlyInviteeUri`
+
+`appointmentUid` est une clé métier unique construite côté dashboard à partir
+du rendez-vous Calendly affiché.
+
+### `Invoice`
+
+Représente une facture liée à un `Payment`.
+
+La relation est :
+
+```text
+Payment 1 -> 0..1 Invoice
+```
+
+La suppression d'un `Payment` supprime la facture associée via cascade.
+
+### `AvailabilitySlot`
+
+Représente une plage de disponibilité ouverte par Julie.
+
+Champs principaux :
+
+- `startAt`
+- `endAt`
+- `isActive`
+- `notes`
+
+Le champ `capacity` a existé brièvement puis a été supprimé.
+
+### `Booking`
+
+Représente une demande ou réservation interne.
+
+Champs principaux :
+
+- `availabilitySlotId`
+- `source`
+- `status`
+- `clientFirstName`
+- `clientLastName`
+- `clientName`
+- `clientEmail`
+- `clientPhone`
+- `clientMessage`
+- `service`
+- `startAt`
+- `endAt`
+- `confirmationTokenHash`
+- `confirmationTokenExpiresAt`
+- `confirmedAt`
+- `cancelledAt`
+
+Enums :
+
+```text
+BookingStatus = PENDING | CONFIRMED | CANCELLED | EXPIRED
+BookingSource = INTERNAL | CALENDLY | ADMIN
+```
+
+## 6. Calendly
+
+Le code Calendly se trouve dans `src/lib/calendar.ts`.
+
+Il utilise `CALENDLY_TOKEN` côté serveur pour appeler :
+
+- `/users/me`
+- `/scheduled_events`
+- `/scheduled_events/{uuid}/invitees`
+
+Les événements sont convertis en `CalendarEvent`, puis utilisés par
+`/dashboard`.
+
+Calendly alimente encore :
+
+- la liste des rendez-vous du dashboard principal ;
+- la saisie des paiements ;
+- la création de factures ;
+- l'export CSV.
+
+La réservation interne n'est pas encore fusionnée avec Calendly.
+
+## 7. Réservation interne
+
+Les parcours publics sont configurés dans `src/lib/reservation-services.ts`.
+
+Durées :
+
+- premier rendez-vous : 90 minutes ;
+- suivi : 60 minutes.
+
+Les données nécessaires aux pages de réservation sont préparées dans
+`src/lib/reservation-page-data.ts`.
+
+Le calcul des horaires disponibles est dans
+`src/lib/reservation-availability.ts`.
+
+Règles actuelles :
+
+- pas de 30 minutes ;
+- uniquement les plages futures actives ;
+- durée autorisée : 60 ou 90 minutes ;
+- un horaire doit être entièrement contenu dans une `AvailabilitySlot` ;
+- les `Booking` `PENDING` et `CONFIRMED` bloquent les chevauchements ;
+- les `Booking` `CANCELLED` et `EXPIRED` ne bloquent pas.
+
+Le backend reste source de vérité dans `POST /api/bookings`.
+
+## 8. Email et SMTP
+
+Le SMTP maison se trouve dans `src/lib/smtp.ts`.
+
+L'email de confirmation se trouve dans
+`src/lib/booking-confirmation.ts`.
+
+L'email envoyé est multipart :
+
+- `text/plain`
+- `text/html`
+
+Le HTML contient :
+
+- un titre ;
+- le rappel du rendez-vous ;
+- un bouton `Confirmer mon rendez-vous` ;
+- un lien brut de secours ;
+- un rappel de vérifier les spams.
+
+Variables SMTP :
 
 ```env
-CALENDLY_TOKEN=""
-DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
-ADMIN_USERNAME="admin"
+SMTP_HOST=""
+SMTP_PORT="587"
+SMTP_USER=""
+SMTP_PASSWORD=""
+SMTP_FROM_ADDRESS=""
+SMTP_FROM_NAME=""
+SMTP_FROM=""
+APP_BASE_URL=""
+```
+
+`SMTP_FROM_ADDRESS` est l'adresse technique utilisée par le protocole SMTP
+dans `MAIL FROM`.
+
+`SMTP_FROM_NAME` est le nom affiché dans le header `From`.
+
+`SMTP_FROM` reste un fallback legacy.
+
+`APP_BASE_URL` sert à construire les liens de confirmation publics. Il doit
+correspondre au domaine réellement accessible dans l'environnement concerné.
+
+## 9. Authentification
+
+L'auth admin se trouve dans `src/lib/auth.ts`.
+
+Principe :
+
+- un compte admin unique ;
+- mot de passe hashé avec bcrypt ;
+- session JWT signée avec `SESSION_SECRET` ;
+- cookie `bienetre_session`, `httpOnly`, durée 8h.
+
+Variables :
+
+```env
+ADMIN_USERNAME=""
 ADMIN_PASSWORD_HASH=""
 SESSION_SECRET=""
 ```
 
-### `CALENDLY_TOKEN`
-
-Token d'accès personnel Calendly utilisé par le serveur pour récupérer les rendez-vous.
-
-Il doit rester secret et côté serveur. Ne jamais le préfixer avec `NEXT_PUBLIC_`.
-
-### `ICAL_SECRET_URL`
-
-Ancienne variable utilisée par l'intégration Google Calendar/iCal. Elle ne correspond plus à l'intégration actuelle et ne doit pas être utilisée pour les nouveaux développements.
-
-### `DATABASE_URL`
-
-URL de connexion PostgreSQL utilisée par Prisma.
-
-En développement local :
-
-```env
-DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
-```
-
-En Docker Compose de production, l'hôte sera généralement le nom du service PostgreSQL, par exemple :
-
-```env
-DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard"
-```
-
-### `ADMIN_USERNAME`
-
-Nom du compte admin unique.
-
-Exemple :
-
-```env
-ADMIN_USERNAME="admin"
-```
-
-### `ADMIN_PASSWORD_HASH`
-
-Hash bcrypt du mot de passe admin. Ne jamais stocker le mot de passe en clair.
-
-Générer un hash :
+Générer un hash bcrypt :
 
 ```bash
 node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('mot-de-passe-admin', 12).then(console.log)"
 ```
 
-Important avec Next.js : les caractères `$` du hash bcrypt doivent être échappés dans `.env.local`.
-
-Exemple :
+Dans un fichier `.env`, les caractères `$` du hash bcrypt doivent être
+échappés :
 
 ```env
 ADMIN_PASSWORD_HASH="\$2b\$12\$..."
 ```
 
-### `SESSION_SECRET`
-
-Secret utilisé pour signer les sessions.
-
-Générer une valeur :
-
-```bash
-openssl rand -base64 32
-```
-
-### Sécurité des fichiers `.env`
-
-- Ne jamais commit `.env.local`.
-- Ne jamais commit de vrais secrets.
-- `.env.example` doit rester un modèle sans valeur sensible.
-
-## 7. Installation & développement
+## 10. Lancement local
 
 Installer les dépendances :
 
@@ -186,130 +332,61 @@ Installer les dépendances :
 npm install
 ```
 
-Démarrer PostgreSQL :
+Démarrer PostgreSQL local :
 
 ```bash
 docker compose up -d db
 ```
 
-Si Docker utilise l'ancienne commande :
+En local hors Docker, `DATABASE_URL` pointe vers PostgreSQL exposé sur la
+machine :
 
-```bash
-docker-compose up -d db
+```env
+DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
 ```
 
-Appliquer la migration Prisma :
+Générer le client Prisma :
 
 ```bash
-npx prisma migrate dev --name init
+npx prisma generate
 ```
 
-Démarrer Next.js en développement :
+Appliquer les migrations en développement :
+
+```bash
+npx prisma migrate dev
+```
+
+Démarrer Next.js :
 
 ```bash
 npm run dev
 ```
 
-Pages utiles :
-
-```text
-http://localhost:3000/
-http://localhost:3000/login
-http://localhost:3000/dashboard
-http://localhost:3000/help
-```
-
-Vérifications :
+Vérifier :
 
 ```bash
 npm run lint
 npm run build
 ```
 
-## 8. État actuel
+Points d'attention :
 
-Le MVP est terminé et fonctionnel.
+- local hors Docker : hôte PostgreSQL `localhost` ;
+- app dans Docker Compose : hôte PostgreSQL `db` ;
+- ne pas lancer de migration contre la mauvaise base ;
+- ne pas committer de secrets ;
+- vérifier `APP_BASE_URL` avant de tester les emails.
 
-Il permet :
+## 11. Déploiement DEV VPS
 
-- de se connecter en admin ;
-- de consulter les rendez-vous Calendly importés côté serveur ;
-- de renseigner, modifier et supprimer des paiements ;
-- de visualiser un récapitulatif ;
-- d'exporter les paiements en CSV ;
-- d'accéder à une page d'aide expliquant le fonctionnement.
-
-## 9. Environnements et déploiement VPS
-
-Le projet supporte trois environnements :
-
-- local sur le PC de développement ;
-- dev VPS sur `dev.bienetre.alexsoutienscolaire.fr` ;
-- prod VPS sur `bienetre.alexsoutienscolaire.fr`.
-
-Le développement local reste volontairement simple : l'application tourne avec `npm run dev` sur la machine, et Docker ne sert qu'à lancer PostgreSQL. Les environnements VPS utilisent des fichiers Compose dédiés pour éviter les conflits de ports, de conteneurs, de volumes et de réseaux.
-
-### 9.1 Développement local
-
-Le fichier `docker-compose.yml` reste dédié au local et lance uniquement la base PostgreSQL.
-
-```bash
-docker compose up -d db
-npx prisma migrate dev
-npm run dev
-```
-
-En local, `DATABASE_URL` pointe vers PostgreSQL exposé sur la machine :
-
-```env
-DATABASE_URL="postgresql://bienetre:bienetre_password@localhost:5432/bienetre_dashboard"
-```
-
-### 9.2 Image Docker de production
-
-Le `Dockerfile` construit l'application Next.js en mode production :
-
-- installation propre avec `npm ci` ;
-- génération Prisma avec `npx prisma generate` ;
-- build Next.js avec `npm run build` ;
-- démarrage avec `npm run start` ;
-- port interne `3000`.
-
-Le fichier `.dockerignore` exclut les dossiers et secrets locaux de l'image Docker.
-
-### 9.3 Variables d'environnement VPS
-
-Sur le VPS, chaque instance possède son propre dossier et son propre fichier `.env`.
-
-Variables attendues :
-
-```env
-CALENDLY_TOKEN="..."
-DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard"
-ADMIN_USERNAME="admin"
-ADMIN_PASSWORD_HASH="\$2b\$12\$..."
-SESSION_SECRET="..."
-POSTGRES_DB="bienetre_dashboard"
-POSTGRES_USER="bienetre"
-POSTGRES_PASSWORD="bienetre_password"
-```
-
-Important :
-
-- `DATABASE_URL` doit utiliser l'hôte `db` sur le VPS, car PostgreSQL tourne dans le réseau Docker interne ;
-- `POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` doivent correspondre à `DATABASE_URL` ;
-- ne jamais commit de vrais secrets ;
-- ne jamais préfixer `CALENDLY_TOKEN` avec `NEXT_PUBLIC_`.
-
-### 9.4 Déploiement dev VPS
-
-Dossier prévu :
+Le dossier DEV prévu est :
 
 ```bash
 /opt/apps/bienetre-dashboard-dev
 ```
 
-Préparer l'application :
+Préparation :
 
 ```bash
 sudo mkdir -p /opt/apps/bienetre-dashboard-dev
@@ -319,121 +396,131 @@ git clone <URL_DU_REPO> .
 nano .env
 ```
 
-Construire et lancer l'instance dev :
+Construire et lancer :
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build
+```
+
+Appliquer les migrations en DEV VPS :
+
+```bash
 docker compose -f docker-compose.dev.yml exec app npx prisma migrate deploy
 ```
 
-L'application dev écoute uniquement en local sur le VPS :
+Consulter les logs :
+
+```bash
+docker compose -f docker-compose.dev.yml logs -f app
+docker compose -f docker-compose.dev.yml logs -f db
+```
+
+L'application DEV écoute sur :
 
 ```text
 127.0.0.1:3006
 ```
 
-Elle est ensuite publiée par Caddy sur :
+Le domaine documenté est :
 
 ```text
 dev.bienetre.alexsoutienscolaire.fr
 ```
 
-### 9.5 Déploiement prod VPS
+Dans le `.env` VPS, `DATABASE_URL` doit utiliser l'hôte `db` :
 
-Dossier prévu :
+```env
+DATABASE_URL="postgresql://bienetre:bienetre_password@db:5432/bienetre_dashboard"
+```
+
+Variables importantes en DEV VPS :
+
+```env
+CALENDLY_TOKEN=""
+DATABASE_URL=""
+ADMIN_USERNAME=""
+ADMIN_PASSWORD_HASH=""
+SESSION_SECRET=""
+SMTP_HOST=""
+SMTP_PORT=""
+SMTP_USER=""
+SMTP_PASSWORD=""
+SMTP_FROM_ADDRESS=""
+SMTP_FROM_NAME=""
+APP_BASE_URL=""
+POSTGRES_DB=""
+POSTGRES_USER=""
+POSTGRES_PASSWORD=""
+```
+
+`POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` doivent correspondre à
+`DATABASE_URL`.
+
+## 12. Sauvegarde et rollback
+
+Avant toute migration importante sur VPS, faire une sauvegarde PostgreSQL.
+
+Exemple DEV, à adapter aux valeurs réelles du `.env` :
 
 ```bash
-/opt/apps/bienetre-dashboard-prod
+docker compose -f docker-compose.dev.yml exec db pg_dump -U bienetre bienetre_dashboard > backup-dev.sql
 ```
 
-Préparer l'application :
+Attention :
 
 ```bash
-sudo mkdir -p /opt/apps/bienetre-dashboard-prod
-sudo chown -R $USER:$USER /opt/apps/bienetre-dashboard-prod
-cd /opt/apps/bienetre-dashboard-prod
-git clone <URL_DU_REPO> .
-nano .env
+docker compose -f docker-compose.dev.yml down -v
 ```
 
-Construire et lancer l'instance prod :
+supprime le volume PostgreSQL DEV
+`bienetre_dashboard_dev_postgres_data`.
+
+Rollback code :
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec app npx prisma migrate deploy
+git checkout <commit_precedent>
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-L'application prod écoute uniquement en local sur le VPS :
+Rollback base :
 
-```text
-127.0.0.1:3005
-```
+- ne se fait pas automatiquement avec le rollback code ;
+- nécessite une sauvegarde SQL ou une stratégie de migration inverse ;
+- doit être préparé avant toute migration risquée.
 
-Elle est ensuite publiée par Caddy sur :
+## 13. Existant vs reste à faire
 
-```text
-bienetre.alexsoutienscolaire.fr
-```
+### Existant
 
-### 9.6 Caddy
+- Dashboard Calendly protégé.
+- Paiements sur rendez-vous Calendly.
+- Factures PDF liées aux paiements.
+- Export CSV des paiements.
+- Disponibilités internes.
+- Réservation publique interne.
+- Parcours premier rendez-vous et suivi.
+- Confirmation email par token.
+- Email HTML multipart.
+- Agenda admin des réservations internes.
 
-Configuration Caddy :
+### Reste à faire
 
-```caddyfile
-dev.bienetre.alexsoutienscolaire.fr {
-    reverse_proxy localhost:3006
-}
+- Relier les `Booking` internes aux paiements.
+- Relier les `Booking` internes aux factures.
+- Inclure les `Booking` internes dans l'export CSV si nécessaire.
+- Fusionner ou rapprocher l'agenda Calendly et l'agenda interne.
+- Ajouter les notifications admin/client manquantes.
+- Gérer les annulations/report côté client.
+- Intégrer les URLs publiques dans WordPress.
+- Définir une stratégie de remplacement progressif de Calendly.
 
-bienetre.alexsoutienscolaire.fr {
-    reverse_proxy localhost:3005
-}
-```
+## 14. Notes de prudence
 
-Recharger Caddy :
-
-```bash
-sudo systemctl reload caddy
-```
-
-Caddy gère automatiquement HTTPS si les DNS pointent vers le VPS et si les ports 80 et 443 sont ouverts.
-
-### 9.7 Séparation dev/prod
-
-Les fichiers VPS sont séparés :
-
-- `docker-compose.dev.yml` pour l'instance dev ;
-- `docker-compose.prod.yml` pour l'instance prod.
-
-Chaque instance possède :
-
-- son conteneur app ;
-- son conteneur PostgreSQL ;
-- son volume PostgreSQL ;
-- son réseau Docker ;
-- son port applicatif local.
-
-PostgreSQL n'est pas exposé publiquement dans les fichiers VPS. Seule l'application est bindée sur `127.0.0.1`, puis Caddy expose les domaines HTTPS.
-
-### 9.8 Vérifications
-
-Avant de déployer :
-
-```bash
-npm run lint
-npm run build
-docker compose -f docker-compose.dev.yml config
-docker compose -f docker-compose.prod.yml config
-```
-
-## 10. Notes importantes
-
-- Calendly est la source actuelle des rendez-vous et reste utilisé en lecture seule.
-- Les paiements sont stockés en base PostgreSQL.
-- Le token Calendly est secret et doit rester côté serveur.
-- `Payment.appointmentUid` est une clé métier unique liée au rendez-vous affiché dans le dashboard.
-- Les routes de facture sous `/api/payments/[appointmentUid]/invoice` gardent un segment nommé `[appointmentUid]`, mais reçoivent en pratique un `Payment.id`. Ce nom est conservé pour compatibilité et ne doit pas être renommé dans une simple passe documentaire.
-- La réservation interne est un chantier futur DEV. Elle ne remplace pas Calendly à ce stade, n'est pas intégrée dans WordPress et n'a pas encore de modèle Prisma dédié.
-- Le projet est conçu pour pouvoir évoluer vers un SaaS.
-- Attention aux ports si plusieurs applications Docker tournent sur le VPS.
-- L'application ne remplace pas Calendly : elle ajoute une couche de suivi métier.
-- L'export CSV reflète les paiements enregistrés dans PostgreSQL.
+- Ne pas refactorer trop vite `Payment.appointmentUid`.
+- Ne pas renommer légèrement les routes facture sous `[appointmentUid]` :
+  elles reçoivent en pratique un `Payment.id`.
+- Ne pas considérer les `Booking` internes comme reliés aux paiements.
+- Ne pas utiliser `docker compose down -v` sans sauvegarde.
+- Vérifier `APP_BASE_URL` avant tout test email réel.
+- Vérifier les variables SMTP avant tout test public.
+- Faire un `pg_dump` avant toute migration VPS importante.
