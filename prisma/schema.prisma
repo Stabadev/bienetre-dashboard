@@ -24,7 +24,6 @@ model AvailabilitySlot {
   startAt   DateTime
   endAt     DateTime
   isActive  Boolean   @default(true)
-  capacity  Int       @default(1)
   notes     String?
   bookings  Booking[]
   createdAt DateTime  @default(now())

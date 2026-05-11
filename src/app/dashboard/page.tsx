@@ -91,6 +91,12 @@ function Dashboard({ calendar }: { calendar: DashboardCalendarState }) {
               </Link>
               <Link
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white/90 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-white"
+                href="/dashboard/disponibilites"
+              >
+                Disponibilités
+              </Link>
+              <Link
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white/90 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:border-amber-300 hover:bg-white"
                 href="/help"
               >
                 Aide
