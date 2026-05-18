@@ -77,10 +77,10 @@ const sourceLabels: Record<BookingSource, string> = {
 const weekDayIndexes = [1, 2, 3, 4, 5, 6];
 const dayStartHour = 6;
 const dayEndHour = 20;
-const stepMinutes = 30;
+const stepMinutes = 15;
 const stepsPerHour = 60 / stepMinutes;
 const totalSteps = (dayEndHour - dayStartHour) * stepsPerHour;
-const rowHeightPx = 32;
+const rowHeightPx = 16;
 const calendarGridTemplateColumns = "4.5rem repeat(6, minmax(8.5rem, 1fr))";
 const calendarHeightPx = totalSteps * rowHeightPx;
 const parisDateKeyFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -145,6 +145,18 @@ function getStepFromDate(value: string): number {
   return Math.round((minutes - dayStartHour * 60) / stepMinutes);
 }
 
+function getGridLineClassName(step: number): string {
+  if (step % stepsPerHour === 0) {
+    return "border-t-2 border-zinc-400";
+  }
+
+  if (step % stepsPerHour === stepsPerHour / 2) {
+    return "border-t border-zinc-300";
+  }
+
+  return "border-t border-zinc-200/70";
+}
+
 function getDurationMinutes(booking: InternalBookingView): number {
   return Math.round(
     (new Date(booking.endAt).getTime() - new Date(booking.startAt).getTime()) /
@@ -174,20 +186,24 @@ function getStatusClassName(status: BookingStatus): string {
   return "bg-amber-100 text-amber-800";
 }
 
-function getBookingBlockClassName(status: BookingStatus): string {
-  if (status === "CONFIRMED") {
-    return "border-emerald-300 bg-emerald-100 text-emerald-950";
-  }
-
-  if (status === "CANCELLED") {
+function getBookingBlockClassName(booking: InternalBookingView): string {
+  if (booking.status === "CANCELLED") {
     return "border-red-200 bg-red-50 text-red-950";
   }
 
-  if (status === "EXPIRED") {
+  if (booking.status === "EXPIRED") {
     return "border-zinc-300 bg-zinc-100 text-zinc-800";
   }
 
-  return "border-amber-300 bg-amber-100 text-amber-950";
+  if (booking.source === "CALENDLY") {
+    return "border-sky-500 bg-sky-200 text-sky-950";
+  }
+
+  if (booking.source === "INTERNAL") {
+    return "border-rose-500 bg-rose-200 text-rose-950";
+  }
+
+  return "border-zinc-400 bg-zinc-200 text-zinc-950";
 }
 
 function getSourceClassName(source: BookingSource): string {
@@ -196,10 +212,10 @@ function getSourceClassName(source: BookingSource): string {
   }
 
   if (source === "ADMIN") {
-    return "bg-violet-100 text-violet-800";
+    return "bg-zinc-200 text-zinc-800";
   }
 
-  return "bg-zinc-100 text-zinc-700";
+  return "bg-rose-100 text-rose-800";
 }
 
 function SourceBadge({ source }: { source: BookingSource }) {
@@ -230,12 +246,7 @@ export function InternalBookingsClient({
   const [availabilitySlots] = useState(initialAvailabilitySlots);
   const [bookings, setBookings] = useState(initialBookings);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  const [selectedBookingId, setSelectedBookingId] = useState(
-    initialBookings.find(
-      (booking) =>
-        booking.status === "PENDING" || booking.status === "CONFIRMED",
-    )?.id ?? initialBookings[0]?.id,
-  );
+  const [selectedBookingId, setSelectedBookingId] = useState<string>();
   const [updatingBookingId, setUpdatingBookingId] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isSyncingCalendly, setIsSyncingCalendly] = useState(false);
@@ -376,65 +387,63 @@ export function InternalBookingsClient({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <section className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Synchronisation Calendly</h2>
-            <p className="mt-1 text-sm text-zinc-600">
-              Importe les rendez-vous Calendly actifs dans l&apos;agenda interne.
-            </p>
+    <div className="flex flex-col gap-4">
+      <section className="rounded-2xl border border-white/70 bg-white/85 px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-9 items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800">
+              {totals.CONFIRMED} confirmés
+            </span>
+            <span className="inline-flex h-9 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800">
+              {totals.PENDING} en attente
+            </span>
           </div>
-          <button
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
-            disabled={isSyncingCalendly}
-            onClick={syncCalendly}
-            type="button"
-          >
-            {isSyncingCalendly ? "Synchronisation..." : "Synchroniser Calendly"}
-          </button>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <span className="text-xs text-zinc-500">
+              Sync manuelle Calendly
+            </span>
+            <button
+              className="inline-flex h-9 items-center justify-center rounded-xl bg-zinc-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              disabled={isSyncingCalendly}
+              onClick={syncCalendly}
+              title="Importe les rendez-vous Calendly actifs dans l'agenda interne."
+              type="button"
+            >
+              {isSyncingCalendly ? "Synchronisation..." : "Synchroniser Calendly"}
+            </button>
+          </div>
         </div>
 
-        {syncResult ? (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            <p className="font-semibold">
-              {syncResult.created} créés · {syncResult.updated} mis à jour ·{" "}
-              {syncResult.skipped} ignorés
-            </p>
-            {syncResult.errors.length > 0 ? (
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {syncResult.errors.map((syncError, index) => (
-                  <li key={`${syncError.calendlyEventUri ?? "event"}-${index}`}>
-                    {syncError.message}
-                  </li>
-                ))}
-              </ul>
+        {syncResult || syncErrorMessage ? (
+          <div className="mt-3">
+            {syncResult ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                <p className="font-semibold">
+                  Sync Calendly : {syncResult.created} créés ·{" "}
+                  {syncResult.updated} mis à jour · {syncResult.skipped} ignorés
+                </p>
+                {syncResult.errors.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {syncResult.errors.map((syncError, index) => (
+                      <li
+                        key={`${syncError.calendlyEventUri ?? "event"}-${index}`}
+                      >
+                        {syncError.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+
+            {syncErrorMessage ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {syncErrorMessage}
+              </p>
             ) : null}
           </div>
         ) : null}
-
-        {syncErrorMessage ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {syncErrorMessage}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        <article className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">RDV confirmés</p>
-          <p className="mt-2 text-3xl font-semibold text-zinc-950">
-            {totals.CONFIRMED}
-          </p>
-        </article>
-        <article className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">
-            En attente du clic client
-          </p>
-          <p className="mt-2 text-3xl font-semibold text-zinc-950">
-            {totals.PENDING}
-          </p>
-        </article>
       </section>
 
       {errorMessage ? (
@@ -504,7 +513,13 @@ export function InternalBookingsClient({
               >
                 {Array.from({ length: totalSteps }).map((_, step) => (
                   <div
-                    className="border-b border-zinc-100 pr-2 text-right text-xs text-zinc-500"
+                    className={`pr-2 text-right text-xs ${getGridLineClassName(
+                      step,
+                    )} ${
+                      step % stepsPerHour === 0
+                        ? "pt-0.5 font-semibold text-zinc-700"
+                        : "text-zinc-400"
+                    }`}
                     key={step}
                     style={{ height: rowHeightPx }}
                   >
@@ -543,30 +558,8 @@ export function InternalBookingsClient({
         ) : (
           <p className="mt-4 text-sm text-zinc-600">
             Les réservations annulées ne sont pas affichées dans l&apos;agenda.
-            Les plages claires indiquent les disponibilités ouvertes. Cliquez
+            Les zones vertes pâles indiquent les disponibilités ouvertes. Cliquez
             sur un rendez-vous pour afficher le détail.
-          </p>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
-        <h2 className="text-xl font-semibold">Détail du rendez-vous</h2>
-        {selectedBooking ? (
-          <div className="mt-4">
-            <BookingDetailPanel
-              booking={selectedBooking}
-              isUpdating={updatingBookingId === selectedBooking.id}
-              onCancel={() =>
-                updateBookingStatus(selectedBooking.id, "CANCELLED")
-              }
-              onConfirm={() =>
-                updateBookingStatus(selectedBooking.id, "CONFIRMED")
-              }
-            />
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-zinc-600">
-            Sélectionnez un rendez-vous dans l&apos;agenda.
           </p>
         )}
       </section>
@@ -605,6 +598,20 @@ export function InternalBookingsClient({
           </div>
         )}
       </section>
+
+      {selectedBooking ? (
+        <BookingDetailModal
+          booking={selectedBooking}
+          isUpdating={updatingBookingId === selectedBooking.id}
+          onCancel={() =>
+            updateBookingStatus(selectedBooking.id, "CANCELLED")
+          }
+          onClose={() => setSelectedBookingId(undefined)}
+          onConfirm={() =>
+            updateBookingStatus(selectedBooking.id, "CONFIRMED")
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -637,12 +644,17 @@ function BookingDayColumn({
 
   return (
     <div
-      className="relative border-l border-zinc-200 bg-white"
-      style={{ height: calendarHeightPx }}
+      className="relative border-l border-zinc-200"
+      style={{
+        backgroundColor: "rgba(250, 250, 250, 0.9)",
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(113,113,122,0.08) 0, rgba(113,113,122,0.08) 1px, transparent 1px, transparent 8px)",
+        height: calendarHeightPx,
+      }}
     >
       {Array.from({ length: totalSteps }).map((_, step) => (
         <div
-          className="border-b border-zinc-100"
+          className={getGridLineClassName(step)}
           key={step}
           style={{ height: rowHeightPx }}
         />
@@ -657,18 +669,13 @@ function BookingDayColumn({
         return (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-1 right-1 rounded-lg border border-emerald-100 bg-emerald-50/70 px-2 py-1 text-xs text-emerald-800"
+            className="pointer-events-none absolute left-1 right-1 rounded-md border-y-2 border-l-4 border-r border-y-emerald-300/80 border-l-emerald-500/80 border-r-emerald-100 bg-emerald-50/60"
             key={slot.id}
             style={{
               height,
               top: slot.startStep * rowHeightPx,
             }}
-          >
-            <span className="block truncate font-medium">Disponible</span>
-            <span className="block truncate">
-              {formatTime(slot.startAt)} - {formatTime(slot.endAt)}
-            </span>
-          </div>
+          />
         );
       })}
 
@@ -682,7 +689,7 @@ function BookingDayColumn({
           <article
             className={`absolute left-1 right-1 z-10 overflow-hidden rounded-lg border px-2 py-1 text-left text-xs shadow-sm transition hover:brightness-95 ${
               selectedBookingId === booking.id ? "ring-2 ring-zinc-900" : ""
-            } ${getBookingBlockClassName(booking.status)}`}
+            } ${getBookingBlockClassName(booking)}`}
             key={booking.id}
             onClick={() => onSelect(booking.id)}
             onKeyDown={(event) => {
@@ -698,19 +705,16 @@ function BookingDayColumn({
             }}
             tabIndex={0}
           >
-            <span className="block font-semibold">
+            <span className="block font-semibold leading-tight">
               {formatTime(booking.startAt)} - {formatTime(booking.endAt)}
             </span>
-            <span className="block truncate">
+            <span className="mt-0.5 block truncate font-semibold">
               {booking.clientName}
             </span>
-            <span className="block truncate">
-              {sourceLabels[booking.source]}
-            </span>
-            <span className="block truncate">
+            <span className="mt-0.5 block truncate opacity-80">
               {statusLabels[booking.status]}
             </span>
-            <span className="block truncate">
+            <span className="block truncate opacity-80">
               {booking.service ?? `${getDurationMinutes(booking)} min`}
             </span>
           </article>
@@ -830,6 +834,57 @@ function BookingDetailPanel({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function BookingDetailModal({
+  booking,
+  isUpdating,
+  onCancel,
+  onClose,
+  onConfirm,
+}: {
+  booking: InternalBookingView;
+  isUpdating: boolean;
+  onCancel: () => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 px-4 py-6"
+      role="dialog"
+    >
+      <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+              Rendez-vous
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-zinc-950">
+              Détail du rendez-vous
+            </h2>
+          </div>
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+            onClick={onClose}
+            type="button"
+          >
+            Fermer
+          </button>
+        </div>
+
+        <div className="mt-5">
+          <BookingDetailPanel
+            booking={booking}
+            isUpdating={isUpdating}
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+          />
+        </div>
+      </section>
+    </div>
   );
 }
 
