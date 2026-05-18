@@ -89,6 +89,12 @@ const parisDateKeyFormatter = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Europe/Paris",
   year: "numeric",
 });
+const parisTimePartsFormatter = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  hourCycle: "h23",
+  minute: "2-digit",
+  timeZone: "Europe/Paris",
+});
 
 function startOfWeek(value: Date): Date {
   const date = new Date(value);
@@ -134,13 +140,18 @@ function getDayLabel(day: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
     month: "short",
+    timeZone: "Europe/Paris",
     weekday: "short",
   }).format(day);
 }
 
 function getStepFromDate(value: string): number {
-  const date = new Date(value);
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = parisTimePartsFormatter.formatToParts(new Date(value));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value ?? 0,
+  );
+  const minutes = hour * 60 + minute;
 
   return Math.round((minutes - dayStartHour * 60) / stepMinutes);
 }
