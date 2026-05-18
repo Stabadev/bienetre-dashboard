@@ -59,6 +59,10 @@ supprime aucun rendez-vous Calendly.
 - Page publique `/reservation/confirmer`.
 - Agenda admin des réservations internes via `/dashboard/reservations`.
 
+L'agenda admin des disponibilités fonctionne par pas de 15 minutes. Les
+créneaux proposés au public dans le parcours de réservation restent générés par
+pas de 30 minutes pour l'instant.
+
 ### Admin Julie
 
 Julie peut aujourd'hui :
@@ -68,9 +72,9 @@ Julie peut aujourd'hui :
 - saisir et modifier des paiements Calendly ;
 - générer des factures liées aux paiements ;
 - exporter les paiements en CSV ;
-- ouvrir ou supprimer des plages de disponibilité ;
-- copier une semaine de disponibilités vers la suivante, avec blocage si la
-  semaine suivante contient déjà des disponibilités ;
+- créer, éditer, déplacer et supprimer des plages de disponibilité ;
+- copier une semaine de disponibilités vers la semaine N+1 ou N+2, avec
+  blocage si la semaine cible contient déjà des disponibilités actives ;
 - consulter les réservations internes dans un agenda hebdomadaire ;
 - voir les disponibilités en fond dans l'agenda des réservations ;
 - confirmer manuellement une demande ;
@@ -119,6 +123,7 @@ GET    /api/export
 
 GET    /api/availability-slots
 POST   /api/availability-slots
+PATCH  /api/availability-slots/[slotId]
 DELETE /api/availability-slots/[slotId]
 
 GET    /api/bookings
@@ -240,7 +245,7 @@ Le calcul des horaires disponibles est dans
 
 Règles actuelles :
 
-- pas de 30 minutes ;
+- créneaux publics proposés par pas de 30 minutes ;
 - uniquement les plages futures actives ;
 - durée autorisée : 60 ou 90 minutes ;
 - un horaire doit être entièrement contenu dans une `AvailabilitySlot` ;

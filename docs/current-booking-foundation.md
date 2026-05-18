@@ -139,16 +139,45 @@ Disponibilités :
 - composant `src/components/dashboard/AvailabilitySlotsClient.tsx` ;
 - API `/api/availability-slots`.
 
+Routes API :
+
+- `GET /api/availability-slots` liste les disponibilités ;
+- `POST /api/availability-slots` crée une disponibilité ;
+- `PATCH /api/availability-slots/[slotId]` modifie `startAt` et `endAt` ;
+- `DELETE /api/availability-slots/[slotId]` supprime une disponibilité.
+
+`PATCH /api/availability-slots/[slotId]` vérifie que la disponibilité existe,
+que les dates sont valides, que `endAt` est strictement après `startAt`, et que
+les horaires sont alignés sur un pas de 15 minutes.
+
 Julie peut :
 
-- afficher une semaine lundi à samedi ;
-- créer une plage de disponibilité à la souris ;
-- supprimer une plage ;
+- afficher une grille lundi à samedi, de 06:00 à 20:00 ;
+- créer une plage de disponibilité par clic-glisser sur le fond de l'agenda ;
+- éditer une plage existante via une modale au clic ;
+- modifier l'heure de début et l'heure de fin par boutons rapides ou listes
+  déroulantes ;
+- déplacer verticalement une plage par drag-and-drop dans la même journée ;
+- supprimer une plage depuis la carte ou la modale ;
 - naviguer entre semaines ;
-- copier une semaine vers la semaine suivante.
+- copier les disponibilités visibles vers la semaine N+1 ou N+2.
 
-La copie de semaine est bloquée si la semaine suivante contient déjà au moins
-une disponibilité active, afin d'éviter les doublons.
+L'agenda admin des disponibilités est manipulé par pas de 15 minutes. Les heures
+pleines sont renforcées visuellement dans la grille pour distinguer rapidement
+les débuts d'heure. Pendant le déplacement vertical d'une plage, la durée est
+conservée et la sauvegarde serveur se fait uniquement au relâchement du pointer.
+En cas d'erreur API, l'affichage revient à la position précédente.
+
+Les messages de succès ou d'erreur sont affichés sous forme de toasts flottants
+hors layout, afin de ne pas décaler l'agenda.
+
+La copie de semaine est bloquée si la semaine cible N+1 ou N+2 contient déjà au
+moins une disponibilité active, afin d'éviter les doublons. Il n'existe pas de
+route dédiée à la copie : elle reste côté client et crée les disponibilités via
+plusieurs appels `POST /api/availability-slots`.
+
+Les créneaux proposés au public dans le parcours de réservation restent générés
+par pas de 30 minutes pour l'instant.
 
 Réservations :
 
