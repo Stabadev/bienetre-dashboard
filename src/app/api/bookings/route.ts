@@ -84,17 +84,32 @@ function serializeBooking(booking: {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const authResponse = await requireAuthResponse();
 
   if (authResponse) {
     return authResponse;
   }
 
+  const { searchParams } = new URL(request.url);
+  const from = readDate(searchParams.get("from"));
+  const to = readDate(searchParams.get("to"));
+
   const bookings = await db.booking.findMany({
     orderBy: {
       startAt: "asc",
     },
+    where:
+      from && to
+        ? {
+            endAt: {
+              gt: from,
+            },
+            startAt: {
+              lt: to,
+            },
+          }
+        : undefined,
   });
 
   return NextResponse.json(bookings.map(serializeBooking));

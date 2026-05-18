@@ -1,6 +1,6 @@
 "use client";
 
-import { PointerEvent, useMemo, useState } from "react";
+import { PointerEvent, useEffect, useMemo, useState } from "react";
 import { formatDate, formatTime } from "./formatters";
 
 export type AvailabilitySlotView = {
@@ -15,6 +15,18 @@ export type AvailabilitySlotView = {
 
 type AvailabilitySlotsClientProps = {
   initialSlots: AvailabilitySlotView[];
+};
+
+type BookingStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+type BookingSource = "INTERNAL" | "CALENDLY" | "ADMIN";
+
+type BookingOverlayView = {
+  id: string;
+  source: BookingSource;
+  status: BookingStatus;
+  startAt: string;
+  endAt: string;
+  label: string;
 };
 
 type DraftSelection = {
@@ -42,6 +54,7 @@ const stepsPerHour = 60 / stepMinutes;
 const totalSteps = (dayEndHour - dayStartHour) * stepsPerHour;
 const rowHeightPx = 14;
 const dragClickThresholdPx = 4;
+const minimumCreatedSlotSteps = 2;
 const calendarGridTemplateColumns = "4.5rem repeat(6, minmax(8.5rem, 1fr))";
 const calendarHeightPx = totalSteps * rowHeightPx;
 const timeOptions = Array.from({ length: totalSteps + 1 }).map((_, step) => {
@@ -159,6 +172,25 @@ function sortSlots(slots: AvailabilitySlotView[]): AvailabilitySlotView[] {
   );
 }
 
+function getBookingOverlayLabel(booking: {
+  clientFirstName?: string | null;
+  clientName?: string | null;
+}) {
+  return booking.clientFirstName?.trim() || booking.clientName?.trim() || "RDV";
+}
+
+function getOverlayClassName(source: BookingSource): string {
+  if (source === "CALENDLY") {
+    return "border-sky-500/45 bg-sky-200/30 text-sky-950";
+  }
+
+  if (source === "INTERNAL") {
+    return "border-rose-500/45 bg-rose-200/30 text-rose-950";
+  }
+
+  return "border-zinc-500/35 bg-zinc-300/30 text-zinc-950";
+}
+
 function normalizeSelection(selection: DraftSelection): DraftSelection {
   return {
     dayIndex: selection.dayIndex,
@@ -189,6 +221,11 @@ export function AvailabilitySlotsClient({
   const [isSaving, setIsSaving] = useState(false);
   const [deletingSlotId, setDeletingSlotId] = useState<string>();
   const [isCopyingWeek, setIsCopyingWeek] = useState(false);
+  const [bookingOverlays, setBookingOverlays] = useState<BookingOverlayView[]>(
+    [],
+  );
+  const [showInternalBookings, setShowInternalBookings] = useState(true);
+  const [showCalendlyBookings, setShowCalendlyBookings] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
   const weekDays = useMemo(
@@ -200,6 +237,90 @@ export function AvailabilitySlotsClient({
 
     return slots.filter((slot) => visibleKeys.has(dateKey(new Date(slot.startAt))));
   }, [slots, weekDays]);
+  const visibleBookingOverlays = useMemo(() => {
+    const visibleKeys = new Set(weekDays.map(dateKey));
+
+    return bookingOverlays.filter((booking) => {
+      if (!visibleKeys.has(dateKey(new Date(booking.startAt)))) {
+        return false;
+      }
+
+      if (booking.source === "INTERNAL") {
+        return showInternalBookings;
+      }
+
+      if (booking.source === "CALENDLY") {
+        return showCalendlyBookings;
+      }
+
+      return true;
+    });
+  }, [bookingOverlays, showCalendlyBookings, showInternalBookings, weekDays]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const from = getDateTimeForStep(weekDays[0], 0);
+    const to = getDateTimeForStep(weekDays[weekDays.length - 1], totalSteps);
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+
+    async function loadBookingOverlays() {
+      try {
+        const response = await fetch(`/api/bookings?${params.toString()}`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const bookings = (await response.json()) as Array<{
+          id: string;
+          source?: BookingSource;
+          status: BookingStatus;
+          clientFirstName?: string | null;
+          clientName?: string | null;
+          startAt: string;
+          endAt: string;
+        }>;
+
+        setBookingOverlays(
+          bookings
+            .filter(
+              (booking) =>
+                booking.status === "CONFIRMED" &&
+                (booking.source === "INTERNAL" ||
+                  booking.source === "CALENDLY" ||
+                  booking.source === "ADMIN"),
+            )
+            .map((booking) => ({
+              id: booking.id,
+              source: booking.source ?? "INTERNAL",
+              status: booking.status,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              label: getBookingOverlayLabel(booking),
+            })),
+        );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les rendez-vous de la semaine.",
+        );
+      }
+    }
+
+    loadBookingOverlays();
+
+    return () => controller.abort();
+  }, [weekDays]);
 
   async function createSlot({
     endAt,
@@ -297,6 +418,14 @@ export function AvailabilitySlotsClient({
 
   async function createSlotFromSelection(selection: DraftSelection) {
     const normalizedSelection = normalizeSelection(selection);
+
+    if (
+      normalizedSelection.endStep - normalizedSelection.startStep <
+      minimumCreatedSlotSteps
+    ) {
+      return;
+    }
+
     const day = weekDays[normalizedSelection.dayIndex];
     const startAt = getDateTimeForStep(day, normalizedSelection.startStep);
     const endAt = getDateTimeForStep(day, normalizedSelection.endStep);
@@ -503,6 +632,43 @@ export function AvailabilitySlotsClient({
           </div>
         </div>
 
+        <div className="mt-4 flex flex-col gap-2 text-xs text-zinc-600">
+          <div className="flex w-fit cursor-default select-none items-center gap-2 rounded-md bg-transparent py-1 pr-2 font-semibold text-emerald-950">
+            <span className="h-4 w-8 rounded border border-emerald-600 bg-emerald-300/90 shadow-sm" />
+            Plage de disponibilité
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 font-medium transition ${
+                showInternalBookings
+                  ? "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100"
+                  : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+              }`}
+              onClick={() => setShowInternalBookings((current) => !current)}
+              type="button"
+            >
+              <span className="h-2.5 w-5 rounded border border-rose-500/45 bg-rose-200/30" />
+              {showInternalBookings
+                ? "Masquer RDV internes"
+                : "Afficher RDV internes"}
+            </button>
+            <button
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 font-medium transition ${
+                showCalendlyBookings
+                  ? "border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100"
+                  : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+              }`}
+              onClick={() => setShowCalendlyBookings((current) => !current)}
+              type="button"
+            >
+              <span className="h-2.5 w-5 rounded border border-sky-500/45 bg-sky-200/30" />
+              {showCalendlyBookings
+                ? "Masquer RDV Calendly"
+                : "Afficher RDV Calendly"}
+            </button>
+          </div>
+        </div>
+
         {errorMessage || successMessage ? (
           <div className="fixed right-4 top-4 z-50 max-w-sm sm:right-6 sm:top-6">
             {errorMessage ? (
@@ -580,6 +746,10 @@ export function AvailabilitySlotsClient({
                   }
                   onStartSelection={startSelection}
                   onUpdateSelection={updateSelection}
+                  bookingOverlays={visibleBookingOverlays.filter(
+                    (booking) =>
+                      dateKey(new Date(booking.startAt)) === dateKey(day),
+                  )}
                   slots={visibleSlots.filter(
                     (slot) => dateKey(new Date(slot.startAt)) === dateKey(day),
                   )}
@@ -625,6 +795,7 @@ function DayColumn({
   onMoveSlot,
   onStartSelection,
   onUpdateSelection,
+  bookingOverlays,
   slots,
 }: {
   dayIndex: number;
@@ -640,6 +811,7 @@ function DayColumn({
   ) => void | Promise<void>;
   onStartSelection: (dayIndex: number, step: number) => void;
   onUpdateSelection: (dayIndex: number, step: number) => void;
+  bookingOverlays: BookingOverlayView[];
   slots: AvailabilitySlotView[];
 }) {
   const [draggedSlot, setDraggedSlot] = useState<DraggedSlot | null>(null);
@@ -809,7 +981,7 @@ function DayColumn({
 
         return (
           <article
-            className={`absolute left-1 right-1 cursor-grab select-none overflow-hidden rounded-lg border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs shadow-sm transition hover:border-emerald-500 hover:bg-emerald-200 active:cursor-grabbing ${
+            className={`absolute left-1 w-[70%] cursor-grab select-none overflow-hidden rounded-lg border border-emerald-500 bg-emerald-300/90 px-2 py-1 text-xs shadow-sm transition hover:border-emerald-600 hover:bg-emerald-300 active:cursor-grabbing ${
               isDragging ? "z-20 opacity-90 ring-2 ring-emerald-500" : ""
             }`}
             key={slot.id}
@@ -856,7 +1028,7 @@ function DayColumn({
               <p className="mt-0.5 truncate text-emerald-800">{slot.notes}</p>
             ) : null}
             <button
-              className="mt-1 rounded-md bg-white/80 px-2 py-0.5 font-medium text-red-700 hover:bg-white disabled:text-zinc-300"
+              className="mt-1 rounded-md bg-white/80 px-2 py-0.5 font-medium text-emerald-900 hover:bg-white disabled:text-zinc-300"
               disabled={deletingSlotId === slot.id}
               onClick={(event) => {
                 event.stopPropagation();
@@ -864,9 +1036,32 @@ function DayColumn({
               }}
               type="button"
             >
-              {deletingSlotId === slot.id ? "..." : "Supprimer"}
+              {deletingSlotId === slot.id ? "..." : "Modifier"}
             </button>
           </article>
+        );
+      })}
+
+      {bookingOverlays.map((booking) => {
+        const startStep = Math.max(0, getStepFromDate(booking.startAt));
+        const endStep = Math.min(totalSteps, getStepFromDate(booking.endAt));
+        const top = startStep * rowHeightPx;
+        const height = Math.max(rowHeightPx, (endStep - startStep) * rowHeightPx);
+
+        return (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-[30%] right-1 z-30 flex items-end justify-end overflow-hidden rounded-md border px-1.5 py-0.5 text-right text-[10px] font-semibold leading-tight opacity-75 shadow-sm ${getOverlayClassName(
+              booking.source,
+            )}`}
+            key={booking.id}
+            style={{ height, top }}
+            title={`${booking.label} - ${formatTime(
+              booking.startAt,
+            )} - ${formatTime(booking.endAt)}`}
+          >
+            <span className="block truncate">{booking.label}</span>
+          </div>
         );
       })}
     </div>

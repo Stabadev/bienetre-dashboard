@@ -48,7 +48,8 @@ export default async function AvailabilitySlotsPage() {
               Disponibilités
             </h1>
             <p className="mt-2 text-zinc-600">
-              Plages ouvertes pour la future réservation interne.
+              Définissez ici les plages proposées aux clients sur les pages de
+              réservation internes.
             </p>
           </div>
 
