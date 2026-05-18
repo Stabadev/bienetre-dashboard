@@ -196,6 +196,8 @@ Julie peut :
   déroulantes ;
 - déplacer verticalement une plage par drag-and-drop dans la même journée ;
 - supprimer une plage depuis la carte ou la modale ;
+- voir les `Booking INTERNAL` et `Booking CALENDLY` en overlay lecture seule ;
+- afficher ou masquer localement les overlays internes et Calendly ;
 - naviguer entre semaines ;
 - copier les disponibilités visibles vers la semaine N+1 ou N+2.
 
@@ -204,6 +206,23 @@ pleines sont renforcées visuellement dans la grille pour distinguer rapidement
 les débuts d'heure. Pendant le déplacement vertical d'une plage, la durée est
 conservée et la sauvegarde serveur se fait uniquement au relâchement du pointer.
 En cas d'erreur API, l'affichage revient à la position précédente.
+
+Un simple clic dans la grille ne crée plus automatiquement de disponibilité.
+La création demande une sélection d'au moins 30 minutes, afin d'éviter les
+mini-plages accidentelles lorsqu'on clique rapidement dans la grille ou sur une
+zone occupée visuellement par un rendez-vous.
+
+Les overlays de rendez-vous sont informatifs seulement :
+
+- `Booking INTERNAL` : rose ;
+- `Booking CALENDLY` : bleu ;
+- disponibilité : vert pâle ;
+- overlays non interactifs, sans modification possible du `Booking` depuis
+  cette page.
+
+Le but UX de `/dashboard/disponibilites` est de permettre à Julie de définir
+ses disponibilités tout en voyant immédiatement les rendez-vous déjà pris. Les
+disponibilités restent les seuls éléments modifiables.
 
 Les messages de succès ou d'erreur sont affichés sous forme de toasts flottants
 hors layout, afin de ne pas décaler l'agenda.
@@ -227,12 +246,37 @@ Julie peut :
 
 - voir un agenda hebdomadaire des réservations internes et des rendez-vous
   Calendly synchronisés ;
-- voir les disponibilités en fond ;
+- voir les disponibilités en arrière-plan informatif ;
 - voir les rendez-vous `PENDING` et `CONFIRMED` au premier plan ;
-- consulter les détails d'une réservation ;
+- consulter les détails d'une réservation dans une modale au clic ;
 - confirmer manuellement une demande ;
 - marquer une réservation interne comme annulée ;
 - lancer une synchronisation manuelle Calendly.
+
+La page `/dashboard/reservations` privilégie les `Booking` comme information
+principale. Les disponibilités sont seulement un contexte visuel :
+
+- zones hors disponibilité : fond gris clair hachuré ;
+- disponibilités : vert ultra pâle, sans texte, avec repères visuels de début
+  et de fin ;
+- rendez-vous Calendly : bleu ;
+- rendez-vous internes : rose ;
+- rendez-vous admin éventuels : gris discret.
+
+La grille horaire est affichée en pas visuel de 15 minutes :
+
+- heure pleine : trait le plus visible ;
+- demi-heure : trait intermédiaire ;
+- quart d'heure : trait discret.
+
+Les détails ne sont plus affichés sous la grille. Un clic sur un rendez-vous
+ouvre une modale contenant client, source, statut, service, date, heure,
+email, téléphone et message éventuel. Les actions internes existantes sont
+conservées lorsqu'elles sont pertinentes.
+
+La synchronisation Calendly est accessible dans un en-tête compact, avec les
+badges de synthèse `confirmés` et `en attente`. Le résultat de sync reste
+affiché après action, mais sans occuper une carte pleine largeur.
 
 Les rendez-vous `CALENDLY` synchronisés sont affichés en lecture seule. Les
 actions de confirmation et d'annulation sont désactivées dans l'application,
@@ -245,6 +289,32 @@ Les statuts sont affichés avec un wording métier :
 - `CANCELLED` : `Annulé` ;
 - `EXPIRED` : `Expiré`.
 
+## Timezone Europe/Paris
+
+Le fuseau métier de l'application est `Europe/Paris`. Julie travaille en
+France et les pages admin doivent afficher les rendez-vous en heure locale
+France, même si le serveur tourne en UTC.
+
+Les dates stockées et échangées restent des instants ISO/UTC, mais le rendu
+visuel des agendas doit convertir explicitement vers `Europe/Paris`.
+
+Un bug a été identifié sur VPS DEV dans `/dashboard/reservations` : après un
+refresh navigateur, les rendez-vous pouvaient apparaître 2h trop tôt en mai.
+La cause était l'utilisation de `Date#getHours()` / `Date#getMinutes()` pour
+calculer les positions verticales. Sur un runtime UTC, `08:00 Europe/Paris`
+était interprété comme `06:00`.
+
+La correction actuelle utilise `Intl.DateTimeFormat` avec
+`timeZone: "Europe/Paris"` pour extraire les heures/minutes servant au
+positionnement vertical de l'agenda réservations. Les formatters partagés de
+`src/components/dashboard/formatters.ts` utilisent également `Europe/Paris`
+pour l'affichage texte.
+
+Recommandation : toute future logique visuelle d'agenda ou de disponibilités
+doit éviter `getHours()` / `getMinutes()` si l'intention métier est l'heure
+France. Utiliser un helper explicite `Europe/Paris` ou un formatter
+`Intl.DateTimeFormat` configuré avec `timeZone: "Europe/Paris"`.
+
 ## Ce qui reste à faire
 
 La transition est partielle. L'existant couvre maintenant :
@@ -254,6 +324,10 @@ La transition est partielle. L'existant couvre maintenant :
 - affichage lecture seule des `Booking CALENDLY` dans l'admin réservations ;
 - affichage des `Booking INTERNAL` confirmés dans `/dashboard` ;
 - paiement des `Booking INTERNAL` via `appointmentUid = booking:{id}`.
+- overlays de rendez-vous dans `/dashboard/disponibilites` ;
+- agenda hebdomadaire `/dashboard/reservations` avec disponibilités en
+  arrière-plan, rendez-vous au premier plan et détail en modale ;
+- correction du positionnement horaire de l'agenda en `Europe/Paris`.
 
 Il reste à faire :
 
