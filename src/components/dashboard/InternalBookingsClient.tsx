@@ -1,13 +1,15 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { formatDate, formatTime } from "./formatters";
 
 type BookingStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
+type BookingSource = "INTERNAL" | "CALENDLY" | "ADMIN";
 
 export type InternalBookingView = {
   id: string;
-  source: string;
+  source: BookingSource;
   status: BookingStatus;
   clientFirstName: string | null;
   clientLastName: string | null;
@@ -49,11 +51,27 @@ type WeekBooking = InternalBookingView & {
   startStep: number;
 };
 
+type CalendlySyncResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{
+    calendlyEventUri: string | null;
+    message: string;
+  }>;
+};
+
 const statusLabels: Record<BookingStatus, string> = {
   CANCELLED: "Annulé",
   CONFIRMED: "RDV confirmé",
   EXPIRED: "Expiré",
   PENDING: "En attente du clic client",
+};
+
+const sourceLabels: Record<BookingSource, string> = {
+  ADMIN: "Admin",
+  CALENDLY: "Calendly",
+  INTERNAL: "Interne",
 };
 
 const weekDayIndexes = [1, 2, 3, 4, 5, 6];
@@ -172,6 +190,30 @@ function getBookingBlockClassName(status: BookingStatus): string {
   return "border-amber-300 bg-amber-100 text-amber-950";
 }
 
+function getSourceClassName(source: BookingSource): string {
+  if (source === "CALENDLY") {
+    return "bg-sky-100 text-sky-800";
+  }
+
+  if (source === "ADMIN") {
+    return "bg-violet-100 text-violet-800";
+  }
+
+  return "bg-zinc-100 text-zinc-700";
+}
+
+function SourceBadge({ source }: { source: BookingSource }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getSourceClassName(
+        source,
+      )}`}
+    >
+      {sourceLabels[source]}
+    </span>
+  );
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => null)) as {
     error?: string;
@@ -184,6 +226,7 @@ export function InternalBookingsClient({
   initialAvailabilitySlots,
   initialBookings,
 }: InternalBookingsClientProps) {
+  const router = useRouter();
   const [availabilitySlots] = useState(initialAvailabilitySlots);
   const [bookings, setBookings] = useState(initialBookings);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -195,6 +238,9 @@ export function InternalBookingsClient({
   );
   const [updatingBookingId, setUpdatingBookingId] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [isSyncingCalendly, setIsSyncingCalendly] = useState(false);
+  const [syncResult, setSyncResult] = useState<CalendlySyncResult>();
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string>();
   const weekDays = useMemo(
     () => weekDayIndexes.map((dayOffset) => addDays(weekStart, dayOffset - 1)),
     [weekStart],
@@ -287,8 +333,93 @@ export function InternalBookingsClient({
     }
   }
 
+  async function reloadBookings() {
+    const response = await fetch("/api/bookings");
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    const refreshedBookings = (await response.json()) as InternalBookingView[];
+
+    setBookings(refreshedBookings);
+  }
+
+  async function syncCalendly() {
+    setIsSyncingCalendly(true);
+    setSyncErrorMessage(undefined);
+    setSyncResult(undefined);
+
+    try {
+      const response = await fetch("/api/admin/calendly/sync", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const result = (await response.json()) as CalendlySyncResult;
+
+      setSyncResult(result);
+      await reloadBookings();
+      router.refresh();
+    } catch (error) {
+      setSyncErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de synchroniser Calendly.",
+      );
+    } finally {
+      setIsSyncingCalendly(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      <section className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Synchronisation Calendly</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Importe les rendez-vous Calendly actifs dans l&apos;agenda interne.
+            </p>
+          </div>
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            disabled={isSyncingCalendly}
+            onClick={syncCalendly}
+            type="button"
+          >
+            {isSyncingCalendly ? "Synchronisation..." : "Synchroniser Calendly"}
+          </button>
+        </div>
+
+        {syncResult ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <p className="font-semibold">
+              {syncResult.created} créés · {syncResult.updated} mis à jour ·{" "}
+              {syncResult.skipped} ignorés
+            </p>
+            {syncResult.errors.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {syncResult.errors.map((syncError, index) => (
+                  <li key={`${syncError.calendlyEventUri ?? "event"}-${index}`}>
+                    {syncError.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {syncErrorMessage ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {syncErrorMessage}
+          </p>
+        ) : null}
+      </section>
+
       <section className="grid gap-3 sm:grid-cols-2">
         <article className="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">RDV confirmés</p>
@@ -452,7 +583,7 @@ export function InternalBookingsClient({
           <div className="mt-4 divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
             {historyBookings.map((booking) => (
               <button
-                className="grid w-full gap-2 px-4 py-3 text-left text-sm transition hover:bg-zinc-50 sm:grid-cols-[1.4fr_1fr_1fr]"
+                className="grid w-full gap-2 px-4 py-3 text-left text-sm transition hover:bg-zinc-50 sm:grid-cols-[1.4fr_1fr_1fr_auto]"
                 key={booking.id}
                 onClick={() => setSelectedBookingId(booking.id)}
                 type="button"
@@ -465,6 +596,9 @@ export function InternalBookingsClient({
                 </span>
                 <span className="text-zinc-600">
                   {statusLabels[booking.status]}
+                </span>
+                <span className="text-zinc-600">
+                  {sourceLabels[booking.source]}
                 </span>
               </button>
             ))}
@@ -571,6 +705,9 @@ function BookingDayColumn({
               {booking.clientName}
             </span>
             <span className="block truncate">
+              {sourceLabels[booking.source]}
+            </span>
+            <span className="block truncate">
               {statusLabels[booking.status]}
             </span>
             <span className="block truncate">
@@ -594,8 +731,11 @@ function BookingDetailPanel({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const canConfirm = booking.status === "PENDING";
-  const canCancel = booking.status === "PENDING" || booking.status === "CONFIRMED";
+  const isCalendlyBooking = booking.source === "CALENDLY";
+  const canConfirm = booking.status === "PENDING" && !isCalendlyBooking;
+  const canCancel =
+    (booking.status === "PENDING" || booking.status === "CONFIRMED") &&
+    !isCalendlyBooking;
 
   return (
     <article className="rounded-xl border border-zinc-200 bg-white p-5">
@@ -609,6 +749,7 @@ function BookingDetailPanel({
             >
               {statusLabels[booking.status]}
             </span>
+            <SourceBadge source={booking.source} />
           </div>
 
           <h2 className="mt-3 text-xl font-semibold text-zinc-950">
@@ -646,7 +787,14 @@ function BookingDetailPanel({
         </div>
       </div>
 
-      {booking.status === "PENDING" ? (
+      {isCalendlyBooking ? (
+        <p className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+          Géré dans Calendly. Les actions de confirmation et d&apos;annulation
+          sont désactivées ici.
+        </p>
+      ) : null}
+
+      {booking.status === "PENDING" && !isCalendlyBooking ? (
         <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           À utiliser seulement si le client a confirmé par téléphone ou
           message.
@@ -670,7 +818,7 @@ function BookingDetailPanel({
         <InfoBlock label="Nom / prénom" value={booking.clientName} />
         <InfoBlock label="Téléphone" value={booking.clientPhone ?? ""} />
         <InfoBlock label="Email" value={booking.clientEmail} />
-        <InfoBlock label="Statut" value={statusLabels[booking.status]} />
+        <InfoBlock label="Source" value={sourceLabels[booking.source]} />
       </div>
 
       {booking.clientMessage ? (
