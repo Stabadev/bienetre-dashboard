@@ -27,6 +27,10 @@ function getServiceLabel(event: CalendarEvent, payment?: SavedPayment): string {
   return payment?.service ?? event.title ?? "Prestation à préciser";
 }
 
+function getSourceLabel(event: CalendarEvent): string {
+  return event.uid.startsWith("booking:") ? "Interne" : "Calendly";
+}
+
 export function AppointmentCard({
   event,
   payment,
@@ -37,6 +41,7 @@ export function AppointmentCard({
   const clientEmail = event.clientEmail ?? "Email non renseigné";
   const clientPhone = event.clientPhone ?? "Téléphone non renseigné";
   const service = getServiceLabel(event, payment);
+  const sourceLabel = getSourceLabel(event);
 
   return (
     <article
@@ -78,6 +83,15 @@ export function AppointmentCard({
         <div className="min-w-0">
           <p className="text-xs font-medium text-zinc-500">Prestation</p>
           <p className="truncate font-medium text-zinc-800">{service}</p>
+          <span
+            className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+              sourceLabel === "Interne"
+                ? "bg-zinc-100 text-zinc-700"
+                : "bg-sky-100 text-sky-800"
+            }`}
+          >
+            {sourceLabel}
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">

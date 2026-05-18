@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { BookingSource, BookingStatus } from "@prisma/client";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { CalendarError, getCalendarEvents } from "@/lib/calendar";
 import type { CalendarEvent } from "@/lib/calendar";
 import { DashboardClient } from "@/components/dashboard/DashboardClient";
 import { isAuthenticated } from "@/lib/auth";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -43,12 +45,26 @@ async function loadEvents(forceRefresh: boolean): Promise<
   | { ok: false; message: string }
 > {
   try {
-    const result = await getCalendarEvents({ forceRefresh });
+    const [result, internalBookings] = await Promise.all([
+      getCalendarEvents({ forceRefresh }),
+      db.booking.findMany({
+        orderBy: {
+          startAt: "asc",
+        },
+        where: {
+          source: BookingSource.INTERNAL,
+          status: BookingStatus.CONFIRMED,
+        },
+      }),
+    ]);
 
     return {
       ok: true,
       calendar: {
-        events: result.events,
+        events: [
+          ...result.events,
+          ...internalBookings.map(mapInternalBookingToCalendarEvent),
+        ],
         lastFetchedAt: result.lastFetchedAt,
         isStale: result.isStale,
         refreshError: result.refreshError,
@@ -65,6 +81,39 @@ async function loadEvents(forceRefresh: boolean): Promise<
   }
 }
 
+function mapInternalBookingToCalendarEvent(booking: {
+  id: string;
+  clientEmail: string;
+  clientFirstName: string | null;
+  clientLastName: string | null;
+  clientName: string;
+  clientPhone: string | null;
+  createdAt: Date;
+  endAt: Date;
+  service: string | null;
+  startAt: Date;
+  updatedAt: Date;
+}): CalendarEvent {
+  return {
+    calendlyEventUri: "",
+    calendlyInviteeUri: null,
+    clientEmail: booking.clientEmail,
+    clientFirstName: booking.clientFirstName,
+    clientLastName: booking.clientLastName,
+    clientName: booking.clientName,
+    clientPhone: booking.clientPhone,
+    createdAt: booking.createdAt.toISOString(),
+    endAt: booking.endAt.toISOString(),
+    eventStatus: null,
+    eventTypeUri: null,
+    inviteeStatus: null,
+    startAt: booking.startAt.toISOString(),
+    title: booking.service ?? "Rendez-vous",
+    uid: `booking:${booking.id}`,
+    updatedAt: booking.updatedAt.toISOString(),
+  };
+}
+
 function Dashboard({ calendar }: { calendar: DashboardCalendarState }) {
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_42%,#ecfdf5_100%)] px-4 py-6 text-zinc-950 sm:px-6 sm:py-10">
@@ -79,7 +128,7 @@ function Dashboard({ calendar }: { calendar: DashboardCalendarState }) {
                 Tableau de bord
               </h1>
               <p className="mt-2 text-zinc-600">
-                Rendez-vous importés depuis Calendly
+                Rendez-vous Calendly et réservations internes confirmées
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">

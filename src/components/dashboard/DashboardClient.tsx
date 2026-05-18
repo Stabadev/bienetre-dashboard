@@ -23,6 +23,10 @@ const PAYMENTS_BY_EVENT_KEY_STORAGE_KEY =
   "bienetre-dashboard:paymentsByEventKey";
 
 function getEventKey(event: CalendarEvent): string {
+  if (event.uid.startsWith("booking:")) {
+    return event.uid;
+  }
+
   return `${event.uid}-${event.startAt}`;
 }
 
@@ -366,8 +370,11 @@ export function DashboardClient({
 
   async function deletePayment(event: CalendarEvent) {
     const appointmentUid = getEventKey(event);
+    const appointmentLabel = event.uid.startsWith("booking:")
+      ? "La réservation interne sera conservée."
+      : "Le rendez-vous Calendly sera conservé.";
     const confirmed = window.confirm(
-      "Supprimer ce paiement ? Le rendez-vous Calendly sera conservé.",
+      `Supprimer ce paiement ? ${appointmentLabel}`,
     );
 
     if (!confirmed) {
