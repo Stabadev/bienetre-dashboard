@@ -8,6 +8,8 @@ import {
 } from "@/lib/calendar";
 import { db } from "@/lib/db";
 
+const CALENDLY_SYNC_MAX_DAYS_AHEAD = 186;
+
 type SyncError = {
   calendlyEventUri: string | null;
   message: string;
@@ -113,7 +115,10 @@ export async function POST() {
   let events: CalendarEvent[];
 
   try {
-    const result = await getCalendarEvents({ forceRefresh: true });
+    const result = await getCalendarEvents({
+      forceRefresh: true,
+      maxDaysAhead: CALENDLY_SYNC_MAX_DAYS_AHEAD,
+    });
     events = result.events;
   } catch (error) {
     const message =

@@ -2,6 +2,8 @@ import { buildClientName, normalizeClientName } from "@/lib/client-name";
 
 const CALENDLY_API_BASE_URL = "https://api.calendly.com";
 const CALENDAR_CACHE_DURATION_MS = 5 * 60 * 1000;
+const DEFAULT_CALENDAR_MAX_DAYS_AHEAD = 30;
+const DEFAULT_CALENDAR_PAST_DAYS = 30;
 
 export type CalendarEvent = {
   uid: string;
@@ -165,12 +167,19 @@ async function getCalendlyUserUri(token: string): Promise<string> {
 async function getCalendlyScheduledEvents(
   token: string,
   userUri: string,
+  {
+    maxDaysAhead = DEFAULT_CALENDAR_MAX_DAYS_AHEAD,
+    pastDays = DEFAULT_CALENDAR_PAST_DAYS,
+  }: {
+    maxDaysAhead?: number;
+    pastDays?: number;
+  } = {},
 ): Promise<CalendlyScheduledEvent[]> {
   const minStartTime = new Date();
-  minStartTime.setDate(minStartTime.getDate() - 30);
+  minStartTime.setDate(minStartTime.getDate() - pastDays);
 
   const maxStartTime = new Date();
-  maxStartTime.setDate(maxStartTime.getDate() + 30);
+  maxStartTime.setDate(maxStartTime.getDate() + maxDaysAhead);
 
   const scheduledEventsUrl = new URL(
     `${CALENDLY_API_BASE_URL}/scheduled_events`,
@@ -263,7 +272,11 @@ function simplifyCalendlyEvent(
   };
 }
 
-async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
+async function fetchCalendarEventsFromCalendly({
+  maxDaysAhead = DEFAULT_CALENDAR_MAX_DAYS_AHEAD,
+}: {
+  maxDaysAhead?: number;
+} = {}): Promise<CalendarEvent[]> {
   const calendlyToken = process.env.CALENDLY_TOKEN;
 
   if (!calendlyToken) {
@@ -273,7 +286,9 @@ async function fetchCalendarEventsFromCalendly(): Promise<CalendarEvent[]> {
   }
 
   const userUri = await getCalendlyUserUri(calendlyToken);
-  const events = await getCalendlyScheduledEvents(calendlyToken, userUri);
+  const events = await getCalendlyScheduledEvents(calendlyToken, userUri, {
+    maxDaysAhead,
+  });
   const activeEvents = events.filter(
     (event) => readString(event.status) === "active",
   );
@@ -368,14 +383,34 @@ function refreshCalendarEventsCache(): Promise<CalendarEventsCache> {
 
 export async function getCalendarEvents({
   forceRefresh = false,
+  maxDaysAhead = DEFAULT_CALENDAR_MAX_DAYS_AHEAD,
 }: {
   forceRefresh?: boolean;
+  maxDaysAhead?: number;
 } = {}): Promise<CalendarEventsResult> {
   const now = Date.now();
+  const usesDefaultDateRange =
+    maxDaysAhead === DEFAULT_CALENDAR_MAX_DAYS_AHEAD;
 
-  if (!forceRefresh && calendarEventsCache && calendarEventsCache.expiresAt > now) {
+  if (
+    usesDefaultDateRange &&
+    !forceRefresh &&
+    calendarEventsCache &&
+    calendarEventsCache.expiresAt > now
+  ) {
     logCalendarCache("cache hit fresh", calendarEventsCache);
     return serializeCalendarEventsCache(calendarEventsCache);
+  }
+
+  if (!usesDefaultDateRange) {
+    const events = await fetchCalendarEventsFromCalendly({ maxDaysAhead });
+    const fetchedAt = Date.now();
+
+    return serializeCalendarEventsCache({
+      events,
+      expiresAt: fetchedAt + CALENDAR_CACHE_DURATION_MS,
+      fetchedAt,
+    });
   }
 
   try {

@@ -13,8 +13,9 @@ L'application contient aujourd'hui deux flux de rendez-vous :
   recevoir des demandes de rendez-vous, confirmer par email et afficher un
   agenda admin dédié.
 
-Ces deux flux coexistent. La réservation interne ne remplace pas encore
-Calendly et n'est pas encore reliée aux paiements, factures ou exports.
+Ces deux flux coexistent pendant une transition progressive. Calendly peut être
+synchronisé manuellement vers `Booking` afin que les rendez-vous déjà pris
+bloquent les créneaux de réservation interne.
 
 ## 2. Stack
 
@@ -35,8 +36,11 @@ Calendly et n'est pas encore reliée aux paiements, factures ou exports.
 ### Calendly, paiements, factures et export
 
 - Lecture des rendez-vous Calendly côté serveur via l'API Calendly.
-- Dashboard admin protégé sur `/dashboard`.
+- Dashboard admin protégé sur `/dashboard`, avec les rendez-vous Calendly
+  historiques et les `Booking INTERNAL` confirmés.
 - Suivi des paiements associés aux rendez-vous Calendly.
+- Paiement possible des `Booking INTERNAL` confirmés via un `appointmentUid`
+  temporaire au format `booking:{id}`.
 - Création et modification de paiements.
 - Suppression d'un paiement sans supprimer le rendez-vous Calendly.
 - Factures PDF liées aux paiements.
@@ -44,6 +48,10 @@ Calendly et n'est pas encore reliée aux paiements, factures ou exports.
 
 Calendly est lu en lecture seule. L'application ne crée, ne modifie et ne
 supprime aucun rendez-vous Calendly.
+
+La synchronisation Calendly vers `Booking` est manuelle depuis
+`/dashboard/reservations`. Elle couvre environ 6 mois dans le futur et crée ou
+met à jour des `Booking` avec `source = CALENDLY`.
 
 ### Réservation interne
 
@@ -58,10 +66,16 @@ supprime aucun rendez-vous Calendly.
 - Email de confirmation avec token.
 - Page publique `/reservation/confirmer`.
 - Agenda admin des réservations internes via `/dashboard/reservations`.
+- Affichage des `Booking CALENDLY` synchronisés en lecture seule dans
+  l'agenda admin des réservations.
 
 L'agenda admin des disponibilités fonctionne par pas de 15 minutes. Les
 créneaux proposés au public dans le parcours de réservation restent générés par
 pas de 30 minutes pour l'instant.
+
+Les pages publiques `/reservation/*` ne contactent pas Calendly. Elles lisent
+uniquement `AvailabilitySlot` et `Booking`. Les `Booking CALENDLY` synchronisés
+en statut `CONFIRMED` bloquent donc les créneaux publics.
 
 ### Admin Julie
 
@@ -70,15 +84,23 @@ Julie peut aujourd'hui :
 - se connecter à l'admin ;
 - consulter le dashboard Calendly historique ;
 - saisir et modifier des paiements Calendly ;
+- saisir un paiement pour un `Booking INTERNAL` confirmé visible dans
+  `/dashboard` ;
 - générer des factures liées aux paiements ;
 - exporter les paiements en CSV ;
 - créer, éditer, déplacer et supprimer des plages de disponibilité ;
 - copier une semaine de disponibilités vers la semaine N+1 ou N+2, avec
   blocage si la semaine cible contient déjà des disponibilités actives ;
 - consulter les réservations internes dans un agenda hebdomadaire ;
+- synchroniser manuellement les rendez-vous Calendly dans l'agenda des
+  réservations ;
 - voir les disponibilités en fond dans l'agenda des réservations ;
 - confirmer manuellement une demande ;
 - marquer une réservation comme annulée.
+
+Les rendez-vous `CALENDLY` synchronisés sont affichés en lecture seule dans
+l'admin réservations. Les actions internes de confirmation/annulation sont
+désactivées car elles ne modifient pas Calendly.
 
 ## 4. Routes principales
 
@@ -121,6 +143,8 @@ GET    /api/invoices/next-number
 
 GET    /api/export
 
+POST   /api/admin/calendly/sync
+
 GET    /api/availability-slots
 POST   /api/availability-slots
 PATCH  /api/availability-slots/[slotId]
@@ -133,6 +157,8 @@ PATCH  /api/bookings/[bookingId]
 
 `POST /api/bookings` est public car il sert au formulaire de réservation.
 `GET /api/bookings` et `PATCH /api/bookings/[bookingId]` sont protégés.
+`POST /api/admin/calendly/sync` est protégé et ne doit être appelé que depuis
+l'admin.
 
 ## 5. Modèles Prisma
 
@@ -150,6 +176,15 @@ Il est encore lié au flux Calendly via :
 
 `appointmentUid` est une clé métier unique construite côté dashboard à partir
 du rendez-vous Calendly affiché.
+
+Pour les `Booking INTERNAL` confirmés, l'application utilise temporairement :
+
+```text
+appointmentUid = booking:{booking.id}
+```
+
+`appointmentUid` reste legacy et devra être remplacé plus tard par une clé
+métier interne plus robuste.
 
 ### `Invoice`
 
@@ -198,6 +233,12 @@ Champs principaux :
 - `confirmationTokenExpiresAt`
 - `confirmedAt`
 - `cancelledAt`
+- `externalEventUri`
+- `externalInviteeUri`
+- `externalEventTypeUri`
+- `externalStatus`
+- `externalUpdatedAt`
+- `syncedAt`
 
 Enums :
 
@@ -226,7 +267,20 @@ Calendly alimente encore :
 - la création de factures ;
 - l'export CSV.
 
-La réservation interne n'est pas encore fusionnée avec Calendly.
+La sync admin `POST /api/admin/calendly/sync` réutilise `getCalendarEvents()`
+avec un horizon étendu :
+
+```text
+maxDaysAhead = 186
+```
+
+Le dashboard principal garde la fenêtre Calendly par défaut, environ 30 jours.
+La sync crée/met à jour des `Booking CALENDLY` idempotents via
+`(source, externalEventUri)`.
+
+Limite connue : si un rendez-vous Calendly est annulé après synchronisation,
+le `Booking CALENDLY` déjà créé peut rester bloquant tant qu'une stratégie de
+désactivation des absents ou de récupération des annulés n'a pas été ajoutée.
 
 ## 7. Réservation interne
 
@@ -251,6 +305,10 @@ Règles actuelles :
 - un horaire doit être entièrement contenu dans une `AvailabilitySlot` ;
 - les `Booking` `PENDING` et `CONFIRMED` bloquent les chevauchements ;
 - les `Booking` `CANCELLED` et `EXPIRED` ne bloquent pas.
+
+Les pages publiques ne font aucun appel Calendly. Avant de remplacer les liens
+Calendly du site WordPress par `/reservation/premier-rdv` et
+`/reservation/suivi`, il faut lancer une dernière synchronisation Calendly.
 
 Le backend reste source de vérité dans `POST /api/bookings`.
 
@@ -499,6 +557,8 @@ Rollback base :
 
 - Dashboard Calendly protégé.
 - Paiements sur rendez-vous Calendly.
+- Affichage des `Booking INTERNAL` confirmés dans le dashboard principal.
+- Paiements sur `Booking INTERNAL` via `appointmentUid = booking:{id}`.
 - Factures PDF liées aux paiements.
 - Export CSV des paiements.
 - Disponibilités internes.
@@ -507,13 +567,16 @@ Rollback base :
 - Confirmation email par token.
 - Email HTML multipart.
 - Agenda admin des réservations internes.
+- Sync manuelle Calendly vers `Booking CALENDLY`.
+- Blocage des créneaux publics par les `Booking CALENDLY`.
+- Affichage lecture seule des `Booking CALENDLY` dans l'admin réservations.
 
 ### Reste à faire
 
-- Relier les `Booking` internes aux paiements.
-- Relier les `Booking` internes aux factures.
-- Inclure les `Booking` internes dans l'export CSV si nécessaire.
-- Fusionner ou rapprocher l'agenda Calendly et l'agenda interne.
+- Remplacer progressivement `appointmentUid` par une vraie clé rendez-vous
+  interne.
+- Relier durablement `Payment` à `Booking` si nécessaire.
+- Gérer les annulations/report Calendly après synchronisation.
 - Ajouter les notifications admin/client manquantes.
 - Gérer les annulations/report côté client.
 - Intégrer les URLs publiques dans WordPress.
@@ -524,7 +587,10 @@ Rollback base :
 - Ne pas refactorer trop vite `Payment.appointmentUid`.
 - Ne pas renommer légèrement les routes facture sous `[appointmentUid]` :
   elles reçoivent en pratique un `Payment.id`.
-- Ne pas considérer les `Booking` internes comme reliés aux paiements.
+- Ne pas considérer `appointmentUid = booking:{id}` comme une architecture
+  définitive.
+- Faire une dernière sync Calendly avant la bascule WordPress vers les pages de
+  réservation internes.
 - Ne pas utiliser `docker compose down -v` sans sauvegarde.
 - Vérifier `APP_BASE_URL` avant tout test email réel.
 - Vérifier les variables SMTP avant tout test public.

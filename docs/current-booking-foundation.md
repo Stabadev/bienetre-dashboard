@@ -5,7 +5,7 @@ réservation interne.
 
 ## État actuel
 
-Deux systèmes coexistent désormais :
+Deux systèmes coexistent pendant la transition :
 
 - Calendly reste utilisé pour le dashboard historique, les paiements, les
   factures et l'export CSV.
@@ -13,8 +13,10 @@ Deux systèmes coexistent désormais :
   les demandes de rendez-vous client, la confirmation email et l'agenda admin
   des réservations.
 
-La réservation interne ne remplace pas encore Calendly. Elle n'est pas encore
-reliée au système de paiement/facture/export.
+La stratégie de transition retenue est progressive : les rendez-vous Calendly
+sont synchronisés manuellement dans `Booking` pour bloquer les créneaux publics,
+mais Calendly reste disponible tant que les liens WordPress n'ont pas été
+remplacés par les pages internes.
 
 ## Calendly
 
@@ -26,12 +28,28 @@ interne `CalendarEvent` au dashboard principal.
 L'application lit Calendly, mais ne crée, ne modifie et ne supprime aucun
 rendez-vous Calendly.
 
-Calendly alimente encore :
+Le dashboard principal garde son comportement historique : il lit Calendly via
+`getCalendarEvents()` avec une fenêtre par défaut d'environ 30 jours.
+
+En parallèle, l'admin peut lancer une synchronisation manuelle depuis
+`/dashboard/reservations`. Cette sync appelle :
+
+- `POST /api/admin/calendly/sync`
+- `getCalendarEvents({ forceRefresh: true, maxDaysAhead: 186 })`
+
+Elle crée ou met à jour des `Booking` avec `source = CALENDLY`, sur un horizon
+d'environ 6 mois. Elle est idempotente grâce à l'unicité
+`(source, externalEventUri)`.
+
+Calendly alimente encore directement :
 
 - `/dashboard` ;
 - la saisie des paiements ;
 - la création de factures ;
 - l'export CSV.
+
+Calendly alimente aussi indirectement l'agenda interne via les `Booking
+CALENDLY` synchronisés.
 
 ## Paiements et identifiant métier
 
@@ -49,7 +67,16 @@ Cette clé est utilisée pour :
 - supprimer un paiement via `/api/payments/[appointmentUid]` ;
 - garantir l'unicité en base.
 
-Les paiements ne sont pas encore reliés aux `Booking` internes.
+Pour les `Booking INTERNAL` confirmés affichés dans `/dashboard`, le paiement
+utilise temporairement un identifiant artificiel :
+
+```text
+appointmentUid = booking:{booking.id}
+```
+
+Il n'existe pas encore de relation Prisma `Payment.bookingId`.
+`appointmentUid` reste donc une dette legacy à conserver pendant la transition,
+puis à nettoyer plus tard.
 
 ## Point d'attention facture
 
@@ -93,6 +120,16 @@ Les horaires sont générés par pas de 30 minutes, à partir des
 `AvailabilitySlot` actives futures. Les `Booking` en statut `PENDING` ou
 `CONFIRMED` bloquent les horaires qui chevauchent. Les statuts `CANCELLED` et
 `EXPIRED` ne bloquent pas.
+
+Les pages publiques `/reservation/*` ne contactent jamais Calendly. Elles lisent
+uniquement la base interne :
+
+- `AvailabilitySlot` ;
+- `Booking INTERNAL` ;
+- `Booking CALENDLY`.
+
+Les `Booking CALENDLY` synchronisés en statut `CONFIRMED` bloquent donc
+naturellement les créneaux publics déjà occupés dans Calendly.
 
 Le backend de création de réservation est `POST /api/bookings`. Il vérifie :
 
@@ -183,16 +220,23 @@ Réservations :
 
 - page `/dashboard/reservations` ;
 - composant `src/components/dashboard/InternalBookingsClient.tsx` ;
-- API `/api/bookings` et `/api/bookings/[bookingId]`.
+- API `/api/bookings` et `/api/bookings/[bookingId]` ;
+- sync Calendly via `POST /api/admin/calendly/sync`.
 
 Julie peut :
 
-- voir un agenda hebdomadaire des réservations internes ;
+- voir un agenda hebdomadaire des réservations internes et des rendez-vous
+  Calendly synchronisés ;
 - voir les disponibilités en fond ;
 - voir les rendez-vous `PENDING` et `CONFIRMED` au premier plan ;
 - consulter les détails d'une réservation ;
 - confirmer manuellement une demande ;
-- marquer une réservation comme annulée.
+- marquer une réservation interne comme annulée ;
+- lancer une synchronisation manuelle Calendly.
+
+Les rendez-vous `CALENDLY` synchronisés sont affichés en lecture seule. Les
+actions de confirmation et d'annulation sont désactivées dans l'application,
+car elles ne modifient pas réellement Calendly.
 
 Les statuts sont affichés avec un wording métier :
 
@@ -203,18 +247,27 @@ Les statuts sont affichés avec un wording métier :
 
 ## Ce qui reste à faire
 
-La réservation interne n'est pas encore connectée à :
+La transition est partielle. L'existant couvre maintenant :
 
-- la saisie des paiements ;
-- les factures ;
-- l'export CSV ;
-- le dashboard Calendly principal ;
-- WordPress.
+- sync manuelle Calendly vers `Booking CALENDLY` ;
+- blocage des créneaux publics par les `Booking CALENDLY` ;
+- affichage lecture seule des `Booking CALENDLY` dans l'admin réservations ;
+- affichage des `Booking INTERNAL` confirmés dans `/dashboard` ;
+- paiement des `Booking INTERNAL` via `appointmentUid = booking:{id}`.
 
-Il n'existe pas encore de couche unifiée "rendez-vous toutes sources".
+Il reste à faire :
 
-Calendly et les Bookings internes doivent donc être considérés comme deux flux
-séparés pour l'instant.
+- remplacer les liens WordPress Calendly par les pages internes ;
+- faire une dernière synchronisation Calendly juste avant cette bascule ;
+- gérer proprement les annulations/report Calendly après sync ;
+- remplacer progressivement `appointmentUid` par une vraie clé rendez-vous
+  interne ;
+- ajouter une relation durable entre `Payment` et `Booking` si nécessaire.
+
+Limite connue : `getCalendarEvents()` ne retourne actuellement que les
+événements Calendly actifs. Une annulation Calendly après synchronisation peut
+laisser un `Booking CALENDLY` bloquant tant qu'une stratégie de désactivation
+des absents ou de récupération des annulés n'a pas été ajoutée.
 
 ## Prudence
 
@@ -224,6 +277,8 @@ Avant toute migration ou bascule réelle :
 - vérifier `DATABASE_URL` selon l'environnement ;
 - vérifier `APP_BASE_URL` pour les liens email ;
 - vérifier les variables SMTP ;
+- faire une dernière sync Calendly avant la bascule WordPress vers
+  `/reservation/premier-rdv` et `/reservation/suivi` ;
 - ne pas utiliser `docker compose down -v` sans sauvegarde ;
 - ne pas refactorer trop vite `Payment.appointmentUid` ni les routes facture
   sous `[appointmentUid]`.
