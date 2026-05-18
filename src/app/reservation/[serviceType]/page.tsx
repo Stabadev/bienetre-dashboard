@@ -41,14 +41,14 @@ export default async function ReservationServicePage({
               width={1392}
             />
             <p className="mt-5 text-sm font-semibold uppercase tracking-wide text-amber-700">
-              {service.label} · {service.shortLabel}
+              Réservation · {service.shortLabel}
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
               {service.title}
             </h1>
             <p className="mt-2 max-w-2xl text-zinc-600">
-              {service.description} Choisissez un jour puis un horaire
-              disponible. La demande sera enregistrée en attente de validation.
+              Choisissez un créneau, renseignez vos coordonnées, puis confirmez
+              votre rendez-vous avec le lien reçu par email.
             </p>
           </div>
 

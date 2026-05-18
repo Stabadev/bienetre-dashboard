@@ -1,16 +1,16 @@
 import { BookingStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  buildAvailableReservationTimes,
-  type AvailableReservationTime,
-} from "@/lib/reservation-availability";
+  buildDisplayReservationTimes,
+  type DisplayReservationTime,
+} from "@/lib/reservation-display-slots";
 
 export async function getReservationPageData({
   durations,
 }: {
   durations: number[];
 }): Promise<{
-  availableTimes: AvailableReservationTime[];
+  availableTimes: DisplayReservationTime[];
 }> {
   const now = new Date();
   const availabilitySlots = await db.availabilitySlot.findMany({
@@ -49,7 +49,7 @@ export async function getReservationPageData({
 
   return {
     availableTimes: durations.flatMap((durationMinutes) =>
-      buildAvailableReservationTimes({
+      buildDisplayReservationTimes({
         availabilitySlots,
         blockingBookings,
         durationMinutes,

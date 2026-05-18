@@ -114,12 +114,45 @@ Pages publiques :
 Le calcul des horaires disponibles se trouve principalement dans :
 
 - `src/lib/reservation-page-data.ts`
-- `src/lib/reservation-availability.ts`
+- `src/lib/reservation-display-slots.ts`
 
-Les horaires sont générés par pas de 30 minutes, à partir des
-`AvailabilitySlot` actives futures. Les `Booking` en statut `PENDING` ou
-`CONFIRMED` bloquent les horaires qui chevauchent. Les statuts `CANCELLED` et
-`EXPIRED` ne bloquent pas.
+`src/lib/reservation-page-data.ts` récupère les `AvailabilitySlot` actives, les
+`Booking` bloquants, la durée du service et `now`, puis délègue la préparation
+des créneaux visibles à `src/lib/reservation-display-slots.ts`.
+
+Le parcours public fonctionne maintenant avec un pas technique de 15 minutes.
+Les quarts d'heure définis par Julie sont donc respectés : une disponibilité
+13:15 -> 18:15 peut proposer 13:15, et un créneau qui finit à 18:15 si la durée
+le permet.
+
+Le moteur d'affichage découpe chaque plage en blocs libres réels après retrait
+des `Booking` `PENDING` ou `CONFIRMED`. Les statuts `CANCELLED` et `EXPIRED` ne
+bloquent pas. Pour chaque bloc libre suffisant, il propose le début et la fin du
+bloc, avec priorité aux créneaux collés aux rendez-vous existants. Il évite
+autant que possible les trous inutilisables de 30 minutes et limite l'affichage
+à 4 créneaux par jour, en gardant si possible une répartition matin/après-midi.
+
+Cette logique est une couche de présentation : elle sert à proposer peu de
+créneaux propres au client, à compacter l'agenda et à réduire les temps morts.
+Elle ne remplace pas la validation backend.
+
+Les pages `/reservation/suivi` et `/reservation/premier-rdv` utilisent un tunnel
+mobile-first :
+
+- choix du mois ;
+- choix d'un jour disponible ;
+- choix d'un horaire ;
+- affichage du formulaire coordonnées seulement après sélection de l'horaire ;
+- CTA `Recevoir mon email de confirmation`.
+
+Après succès, le formulaire disparaît. Le message final explique que l'email de
+confirmation a été envoyé, qu'il faut cliquer sur le lien reçu, vérifier les
+spams, et que le rendez-vous n'est pas confirmé sans validation email.
+
+Si le mois courant ne contient aucun créneau, l'interface affiche
+automatiquement le prochain mois contenant des créneaux. Si l'utilisateur revient
+manuellement sur un mois vide, un message indique simplement qu'aucun créneau
+n'est proposé ce mois-ci.
 
 Les pages publiques `/reservation/*` ne contactent jamais Calendly. Elles lisent
 uniquement la base interne :
@@ -137,6 +170,17 @@ Le backend de création de réservation est `POST /api/bookings`. Il vérifie :
 - la présence des informations client requises ;
 - l'existence d'une plage de disponibilité couvrante ;
 - l'absence de chevauchement avec un Booking actif.
+
+`POST /api/bookings` reste la source de vérité. La V1.1 du parcours public n'a
+pas modifié Prisma, Calendly, la synchronisation Calendly, le dashboard admin,
+le schéma de base de données, ni les migrations.
+
+Vérifications réalisées :
+
+- `npx tsc --noEmit` : OK ;
+- `npm run lint` : OK ;
+- deux warnings `jsx-a11y/alt-text` restent présents dans
+  `src/components/invoices/InvoicePdfDocument.tsx`, sans lien avec ce chantier.
 
 ## Confirmation email
 
@@ -232,8 +276,9 @@ moins une disponibilité active, afin d'éviter les doublons. Il n'existe pas de
 route dédiée à la copie : elle reste côté client et crée les disponibilités via
 plusieurs appels `POST /api/availability-slots`.
 
-Les créneaux proposés au public dans le parcours de réservation restent générés
-par pas de 30 minutes pour l'instant.
+Les créneaux proposés au public respectent aussi le pas de 15 minutes des
+disponibilités Julie, mais ils sont filtrés par le moteur public pour ne montrer
+que quelques horaires utiles au client.
 
 Réservations :
 
@@ -321,6 +366,9 @@ La transition est partielle. L'existant couvre maintenant :
 
 - sync manuelle Calendly vers `Booking CALENDLY` ;
 - blocage des créneaux publics par les `Booking CALENDLY` ;
+- parcours public mobile-first mois -> jour -> horaire -> coordonnées ;
+- moteur public de créneaux en pas technique de 15 minutes, limité à 4 créneaux
+  visibles par jour ;
 - affichage lecture seule des `Booking CALENDLY` dans l'admin réservations ;
 - affichage des `Booking INTERNAL` confirmés dans `/dashboard` ;
 - paiement des `Booking INTERNAL` via `appointmentUid = booking:{id}`.

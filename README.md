@@ -69,9 +69,28 @@ met à jour des `Booking` avec `source = CALENDLY`.
 - Affichage des `Booking CALENDLY` synchronisés en lecture seule dans
   l'agenda admin des réservations.
 
-L'agenda admin des disponibilités fonctionne par pas de 15 minutes. Les
-créneaux proposés au public dans le parcours de réservation restent générés par
-pas de 30 minutes pour l'instant.
+L'agenda admin des disponibilités fonctionne par pas de 15 minutes. Les pages
+publiques respectent désormais ces quarts d'heure : une plage Julie commençant
+à 13:15 peut proposer un rendez-vous à 13:15 si le créneau est pertinent.
+
+Les parcours publics `/reservation/suivi` et `/reservation/premier-rdv` sont
+présentés comme un tunnel mobile-first :
+
+- choix du mois ;
+- choix d'un jour contenant des créneaux proposés ;
+- choix d'un horaire ;
+- affichage du formulaire coordonnées seulement après sélection d'un horaire ;
+- envoi via le CTA `Recevoir mon email de confirmation`.
+
+Après succès, le formulaire disparaît et un message explique que l'email a été
+envoyé, qu'il faut cliquer sur le lien reçu, vérifier les spams, et que le
+rendez-vous n'est pas confirmé sans validation email. Si le mois courant ne
+contient aucun créneau, l'interface affiche automatiquement le prochain mois
+utile. Si Julie ou le client revient manuellement sur un mois vide, un message
+simple indique qu'aucun créneau n'est proposé ce mois-ci.
+
+Les créneaux visibles sont limités à 4 par jour. La préparation cherche à garder
+quelques choix simples, avec une répartition matin/après-midi si possible.
 
 Les pages publiques `/reservation/*` ne contactent pas Calendly. Elles lisent
 uniquement `AvailabilitySlot` et `Booking`. Les `Booking CALENDLY` synchronisés
@@ -348,13 +367,26 @@ Durées :
 Les données nécessaires aux pages de réservation sont préparées dans
 `src/lib/reservation-page-data.ts`.
 
-Le calcul des horaires disponibles est dans
-`src/lib/reservation-availability.ts`.
+La préparation des créneaux affichés au public est dans
+`src/lib/reservation-display-slots.ts`, appelée depuis
+`src/lib/reservation-page-data.ts`. L'ancien calcul technique dans
+`src/lib/reservation-availability.ts` reste présent, mais le parcours public
+utilise maintenant le moteur d'affichage optimisé.
 
 Règles actuelles :
 
-- créneaux publics proposés par pas de 30 minutes ;
-- uniquement les plages futures actives ;
+- préparation publique par pas technique de 15 minutes ;
+- respect des quarts d'heure définis dans les `AvailabilitySlot` ;
+- construction à partir des `AvailabilitySlot`, des `Booking` bloquants, de la
+  durée du service et de `now` ;
+- découpage des plages en blocs libres réels après retrait des rendez-vous
+  existants ;
+- proposition du début et de la fin de chaque bloc libre utile ;
+- priorité aux créneaux collés aux rendez-vous existants ;
+- évitement autant que possible des trous inutilisables de 30 minutes ;
+- maximum 4 créneaux visibles par jour ;
+- logique pensée pour compacter l'agenda, réduire les temps morts et garder
+  quelques choix simples côté client ;
 - durée autorisée : 60 ou 90 minutes ;
 - un horaire doit être entièrement contenu dans une `AvailabilitySlot` ;
 - les `Booking` `PENDING` et `CONFIRMED` bloquent les chevauchements ;
@@ -365,6 +397,16 @@ Calendly du site WordPress par `/reservation/premier-rdv` et
 `/reservation/suivi`, il faut lancer une dernière synchronisation Calendly.
 
 Le backend reste source de vérité dans `POST /api/bookings`.
+
+Ce chantier n'a pas modifié Prisma, Calendly, la synchronisation Calendly, le
+dashboard admin, le schéma de base de données, ni les migrations.
+
+Vérifications réalisées après la V1.1 du parcours public :
+
+- `npx tsc --noEmit` : OK ;
+- `npm run lint` : OK ;
+- deux warnings `jsx-a11y/alt-text` restent présents dans
+  `src/components/invoices/InvoicePdfDocument.tsx`, sans lien avec ce chantier.
 
 ## 8. Email et SMTP
 

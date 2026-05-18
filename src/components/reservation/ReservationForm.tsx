@@ -2,6 +2,13 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { formatDate, formatTime } from "@/components/dashboard/formatters";
+import {
+  buildDisplayReservationCalendar,
+  getNextMonthWithAvailability,
+  getParisMonthKey,
+  type DisplayReservationDay,
+  type DisplayReservationTime,
+} from "@/lib/reservation-display-slots";
 
 type ReservationFormProps = {
   availableTimes: AvailableReservationTimeView[];
@@ -10,12 +17,7 @@ type ReservationFormProps = {
   serviceLabel?: string;
 };
 
-type AvailableReservationTimeView = {
-  availabilitySlotId: string;
-  durationMinutes: number;
-  startAt: string;
-  endAt: string;
-};
+type AvailableReservationTimeView = DisplayReservationTime;
 
 type BookingResponse = {
   id: string;
@@ -25,67 +27,39 @@ type BookingResponse = {
   status: string;
 };
 
-const durationOptions = [
-  { description: "Rendez-vous de suivi", label: "1h", value: 60 },
-  { description: "Premier rendez-vous", label: "1h30", value: 90 },
-];
-
-const parisDateKeyFormatter = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
+const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
+  month: "long",
   timeZone: "Europe/Paris",
   year: "numeric",
 });
+const dayFormatter = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "long",
+  timeZone: "Europe/Paris",
+  weekday: "long",
+});
 
-function getParisDateKey(value: string): string {
-  const parts = parisDateKeyFormatter.formatToParts(new Date(value));
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
-}
-
-function dateFromKey(dateKey: string): Date {
+function dateFromDateKey(dateKey: string): Date {
   return new Date(`${dateKey}T12:00:00`);
 }
 
+function dateFromMonthKey(monthKey: string): Date {
+  return new Date(`${monthKey}-01T12:00:00`);
+}
+
+function getMonthLabel(monthKey: string): string {
+  return monthFormatter.format(dateFromMonthKey(monthKey));
+}
+
 function getDayLabel(dateKey: string): string {
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    timeZone: "Europe/Paris",
-    weekday: "short",
-  }).format(dateFromKey(dateKey));
+  return dayFormatter.format(dateFromDateKey(dateKey));
 }
 
-function addDays(date: Date, days: number): Date {
-  const nextDate = new Date(date);
+function addMonths(monthKey: string, offset: number): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1, 12, 0, 0));
 
-  nextDate.setDate(nextDate.getDate() + days);
-
-  return nextDate;
-}
-
-function buildCalendarDays(availableDateKeys: string[]): string[] {
-  if (availableDateKeys.length === 0) {
-    return [];
-  }
-
-  const sortedKeys = [...availableDateKeys].sort();
-  const firstDay = dateFromKey(sortedKeys[0]);
-  const lastDay = dateFromKey(sortedKeys.at(-1) ?? sortedKeys[0]);
-  const days: string[] = [];
-
-  for (
-    let day = firstDay;
-    day.getTime() <= lastDay.getTime();
-    day = addDays(day, 1)
-  ) {
-    days.push(day.toISOString().slice(0, 10));
-  }
-
-  return days;
+  return date.toISOString().slice(0, 7);
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -116,9 +90,14 @@ export function ReservationForm({
   serviceLabel,
 }: ReservationFormProps) {
   const [availableTimes, setAvailableTimes] = useState(initialAvailableTimes);
-  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(60);
+  const [selectedDurationMinutes] = useState<60 | 90>(
+    fixedDurationMinutes ?? 60,
+  );
   const durationMinutes = fixedDurationMinutes ?? selectedDurationMinutes;
-  const isDurationFixed = fixedDurationMinutes !== undefined;
+  const currentMonthKey = useMemo(() => getParisMonthKey(new Date()), []);
+  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
+  const [hasSelectedMonthManually, setHasSelectedMonthManually] =
+    useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [selectedStartAt, setSelectedStartAt] = useState("");
   const [clientFirstName, setClientFirstName] = useState("");
@@ -137,42 +116,38 @@ export function ReservationForm({
       ),
     [availableTimes, durationMinutes],
   );
-  const timesByDate = useMemo(
-    () =>
-      filteredAvailableTimes.reduce<Record<string, AvailableReservationTimeView[]>>(
-        (groupedTimes, availableTime) => {
-          const dateKey = getParisDateKey(availableTime.startAt);
-
-          return {
-            ...groupedTimes,
-            [dateKey]: [...(groupedTimes[dateKey] ?? []), availableTime],
-          };
-        },
-        {},
-      ),
+  const displayCalendar = useMemo(
+    () => buildDisplayReservationCalendar(filteredAvailableTimes),
     [filteredAvailableTimes],
   );
-  const availableDateKeys = useMemo(
-    () => Object.keys(timesByDate).sort(),
-    [timesByDate],
+  const effectiveMonthKey = hasSelectedMonthManually
+    ? selectedMonthKey
+    : getNextMonthWithAvailability(displayCalendar, currentMonthKey);
+  const visibleMonth =
+    displayCalendar.monthsByKey[effectiveMonthKey] ?? null;
+  const visibleDays = visibleMonth?.days ?? [];
+  const selectedDay = visibleDays.find(
+    (day) => day.dateKey === selectedDateKey,
   );
-  const calendarDays = useMemo(
-    () => buildCalendarDays(availableDateKeys),
-    [availableDateKeys],
+  const selectedDayTimes = selectedDay?.times ?? [];
+  const selectedTime = selectedDayTimes.find(
+    (time) => time.startAt === selectedStartAt,
   );
-  const visibleSelectedDateKey =
-    selectedDateKey && timesByDate[selectedDateKey]
-      ? selectedDateKey
-      : availableDateKeys[0] ?? "";
-  const selectedDayTimes = visibleSelectedDateKey
-    ? timesByDate[visibleSelectedDateKey] ?? []
-    : [];
+
+  function selectMonth(monthKey: string) {
+    setHasSelectedMonthManually(true);
+    setSelectedMonthKey(monthKey);
+    setSelectedDateKey("");
+    setSelectedStartAt("");
+    setCreatedBooking(undefined);
+    setErrorMessage(undefined);
+  }
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!selectedStartAt) {
-      setErrorMessage("Choisissez un horaire disponible.");
+      setErrorMessage("Choisissez un horaire.");
       setCreatedBooking(undefined);
       return;
     }
@@ -210,6 +185,7 @@ export function ReservationForm({
           (availableTime) => !overlapsBooking({ availableTime, booking }),
         ),
       );
+      setSelectedDateKey("");
       setSelectedStartAt("");
       setClientFirstName("");
       setClientLastName("");
@@ -227,259 +203,323 @@ export function ReservationForm({
     }
   }
 
+  if (createdBooking) {
+    return (
+      <ConfirmationSuccess
+        booking={createdBooking}
+        durationMinutes={durationMinutes}
+        serviceLabel={serviceLabel}
+      />
+    );
+  }
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <form
-        className="rounded-2xl border border-white/70 bg-white/85 p-5 shadow-sm sm:p-6"
-        onSubmit={submitReservation}
-      >
-        <div className="grid gap-5">
-          {isDurationFixed ? (
-            <section className="rounded-xl border border-amber-100 bg-amber-50/70 p-4">
-              <p className="text-sm font-semibold text-amber-950">
-                {serviceLabel ?? "Séance"} ·{" "}
-                {durationMinutes === 90 ? "1h30" : "1h"}
-              </p>
-              {serviceDescription ? (
-                <p className="mt-2 text-sm leading-6 text-zinc-700">
-                  {serviceDescription}
-                </p>
-              ) : null}
-            </section>
-          ) : (
-            <fieldset>
-              <legend className="text-sm font-semibold">Durée de séance</legend>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {durationOptions.map((option) => {
-                  const isSelected = durationMinutes === option.value;
+    <form
+      className="mx-auto grid w-full max-w-3xl gap-4 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm sm:p-6"
+      onSubmit={submitReservation}
+    >
+      <section className="rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+        <p className="text-sm font-semibold text-amber-950">
+          {serviceLabel ?? "Séance"} · {durationMinutes === 90 ? "1h30" : "1h"}
+        </p>
+        {serviceDescription ? (
+          <p className="mt-2 text-sm leading-6 text-zinc-700">
+            {serviceDescription}
+          </p>
+        ) : null}
+      </section>
 
-                  return (
-                    <button
-                      aria-pressed={isSelected}
-                      className={`h-11 rounded-xl border px-4 text-sm font-semibold transition ${
-                        isSelected
-                          ? "border-amber-600 bg-amber-600 text-white"
-                          : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
-                      }`}
-                      key={option.value}
-                      onClick={() => {
-                        setSelectedDurationMinutes(option.value);
-                        setSelectedDateKey("");
-                        setSelectedStartAt("");
-                        setCreatedBooking(undefined);
-                        setErrorMessage(undefined);
-                      }}
-                      type="button"
-                    >
-                      <span className="block">{option.label}</span>
-                      <span
-                        className={`mt-0.5 block text-xs font-medium ${
-                          isSelected ? "text-amber-50" : "text-zinc-500"
-                        }`}
-                      >
-                        {option.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
-
-          <fieldset>
-            <legend className="text-sm font-semibold">
-              Jour souhaité
-            </legend>
-            {filteredAvailableTimes.length === 0 ? (
-              <p className="mt-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
-                Aucun horaire disponible pour cette durée.
+      {displayCalendar.months.length === 0 ? (
+        <EmptyState message="Aucun créneau n'est proposé pour le moment." />
+      ) : (
+        <>
+          <section>
+            <SectionTitle eyebrow="1" title="Choisissez un mois" />
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white p-2">
+              <button
+                className="h-11 rounded-lg border border-zinc-200 px-4 text-lg font-semibold text-zinc-800 transition hover:border-amber-300 hover:bg-amber-50"
+                onClick={() => selectMonth(addMonths(effectiveMonthKey, -1))}
+                type="button"
+              >
+                ‹
+              </button>
+              <p className="text-center text-base font-semibold capitalize text-zinc-950">
+                {getMonthLabel(effectiveMonthKey)}
               </p>
+              <button
+                className="h-11 rounded-lg border border-zinc-200 px-4 text-lg font-semibold text-zinc-800 transition hover:border-amber-300 hover:bg-amber-50"
+                onClick={() => selectMonth(addMonths(effectiveMonthKey, 1))}
+                type="button"
+              >
+                ›
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle eyebrow="2" title="Choisissez un jour" />
+            {visibleDays.length === 0 ? (
+              <EmptyState message="Aucun créneau proposé ce mois-ci." />
             ) : (
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {calendarDays.map((dateKey) => {
-                  const isAvailable = timesByDate[dateKey] !== undefined;
-                  const isSelected = visibleSelectedDateKey === dateKey;
-
-                  return (
-                    <button
-                      aria-pressed={isSelected}
-                      className={`min-h-16 rounded-xl border px-3 py-2 text-left text-sm transition ${
-                        isSelected
-                          ? "border-amber-600 bg-amber-600 text-white"
-                          : isAvailable
-                            ? "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
-                            : "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
-                      }`}
-                      disabled={!isAvailable}
-                      key={dateKey}
-                      onClick={() => {
-                        setSelectedDateKey(dateKey);
-                        setSelectedStartAt("");
-                        setCreatedBooking(undefined);
-                        setErrorMessage(undefined);
-                      }}
-                      type="button"
-                    >
-                      <span className="block font-semibold">
-                        {getDayLabel(dateKey)}
-                      </span>
-                      {isAvailable ? (
-                        <span
-                          className={`mt-1 block text-xs ${
-                            isSelected ? "text-amber-50" : "text-zinc-500"
-                          }`}
-                        >
-                          {timesByDate[dateKey].length} horaire
-                          {timesByDate[dateKey].length > 1 ? "s" : ""}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {visibleDays.map((day) => (
+                  <DayButton
+                    day={day}
+                    isSelected={selectedDateKey === day.dateKey}
+                    key={day.dateKey}
+                    onSelect={() => {
+                      setSelectedDateKey(day.dateKey);
+                      setSelectedStartAt("");
+                      setCreatedBooking(undefined);
+                      setErrorMessage(undefined);
+                    }}
+                  />
+                ))}
               </div>
             )}
-          </fieldset>
+          </section>
 
-          {filteredAvailableTimes.length > 0 ? (
-            <fieldset>
-              <legend className="text-sm font-semibold">
-                Horaire disponible
-              </legend>
-              {selectedDayTimes.length === 0 ? (
-                <p className="mt-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
-                  Sélectionnez un jour disponible.
-                </p>
-              ) : (
-                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {selectedDayTimes.map((availableTime) => {
-                    const isSelected =
-                      selectedStartAt === availableTime.startAt;
-
-                    return (
-                      <button
-                        aria-pressed={isSelected}
-                        className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
-                          isSelected
-                            ? "border-amber-600 bg-amber-600 text-white"
-                            : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
-                        }`}
-                        key={`${availableTime.durationMinutes}-${availableTime.startAt}`}
-                        onClick={() => {
-                          setSelectedStartAt(availableTime.startAt);
-                          setCreatedBooking(undefined);
-                          setErrorMessage(undefined);
-                        }}
-                        type="button"
-                      >
-                        <span className="block font-semibold">
-                          {formatTime(availableTime.startAt)} -{" "}
-                          {formatTime(availableTime.endAt)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </fieldset>
+          {selectedDay ? (
+            <section>
+              <SectionTitle eyebrow="3" title="Choisissez un horaire" />
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {selectedDayTimes.map((availableTime) => (
+                  <TimeButton
+                    isSelected={selectedStartAt === availableTime.startAt}
+                    key={`${availableTime.durationMinutes}-${availableTime.startAt}`}
+                    onSelect={() => {
+                      setSelectedStartAt(availableTime.startAt);
+                      setCreatedBooking(undefined);
+                      setErrorMessage(undefined);
+                    }}
+                    time={availableTime}
+                  />
+                ))}
+              </div>
+            </section>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="Prénom"
-              onChange={setClientFirstName}
-              required
-              value={clientFirstName}
-            />
-            <TextField
-              label="Nom"
-              onChange={setClientLastName}
-              required
-              value={clientLastName}
-            />
-          </div>
+          {selectedTime ? (
+            <>
+              <ReservationSummary
+                durationMinutes={durationMinutes}
+                selectedTime={selectedTime}
+                serviceLabel={serviceLabel}
+              />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="Email"
-              onChange={setClientEmail}
-              required
-              type="email"
-              value={clientEmail}
-            />
-            <TextField
-              label="Téléphone"
-              onChange={setClientPhone}
-              required
-              type="tel"
-              value={clientPhone}
-            />
-          </div>
+              <section>
+                <SectionTitle eyebrow="4" title="Vos coordonnées" />
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Prénom"
+                    onChange={setClientFirstName}
+                    required
+                    value={clientFirstName}
+                  />
+                  <TextField
+                    label="Nom"
+                    onChange={setClientLastName}
+                    required
+                    value={clientLastName}
+                  />
+                </div>
 
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            Message optionnel
-            <textarea
-              className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
-              onChange={(event) => setClientMessage(event.target.value)}
-              value={clientMessage}
-            />
-          </label>
-        </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Email"
+                    onChange={setClientEmail}
+                    required
+                    type="email"
+                    value={clientEmail}
+                  />
+                  <TextField
+                    label="Téléphone"
+                    onChange={setClientPhone}
+                    required
+                    type="tel"
+                    value={clientPhone}
+                  />
+                </div>
 
-        {errorMessage ? (
-          <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {errorMessage}
-          </p>
-        ) : null}
+                <label className="mt-4 flex flex-col gap-2 text-sm font-medium">
+                  Message optionnel
+                  <textarea
+                    className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+                    onChange={(event) => setClientMessage(event.target.value)}
+                    value={clientMessage}
+                  />
+                </label>
 
-        {createdBooking ? (
-          <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-            Demande enregistrée pour le {formatDate(createdBooking.startAt)} à{" "}
-            {formatTime(createdBooking.startAt)}. Un email de confirmation vient
-            d&apos;être envoyé.
-          </p>
-        ) : null}
+                <p className="mt-4 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2 text-sm leading-6 text-amber-950">
+                  Vous recevrez un email avec un lien à cliquer pour confirmer
+                  votre rendez-vous.
+                </p>
+              </section>
+            </>
+          ) : null}
+        </>
+      )}
 
+      {errorMessage ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {errorMessage}
+        </p>
+      ) : null}
+
+      {selectedTime ? (
         <button
-          className="mt-6 h-12 w-full rounded-xl bg-amber-600 px-4 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="h-12 w-full rounded-xl bg-amber-600 px-4 font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
           disabled={isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Envoi..." : "Envoyer la demande"}
+          {isSubmitting
+            ? "Envoi..."
+            : "Recevoir mon email de confirmation"}
         </button>
-      </form>
+      ) : null}
+    </form>
+  );
+}
 
-      <aside className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-sm">
-        <h2 className="text-lg font-semibold">Votre demande</h2>
-        <dl className="mt-4 flex flex-col gap-3 text-sm">
-          <div>
-            <dt className="font-medium text-zinc-500">Durée</dt>
-            <dd className="mt-1 font-semibold text-zinc-950">
-              {durationMinutes === 90 ? "1h30" : "1h"}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-zinc-500">Jour</dt>
-            <dd className="mt-1 font-semibold text-zinc-950">
-              {visibleSelectedDateKey
-                ? formatDate(dateFromKey(visibleSelectedDateKey).toISOString())
-                : "À sélectionner"}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-zinc-500">Horaire</dt>
-            <dd className="mt-1 font-semibold text-zinc-950">
-              {selectedStartAt ? formatTime(selectedStartAt) : "À sélectionner"}
-            </dd>
-          </div>
-        </dl>
-
-        <p className="mt-5 text-xs leading-5 text-zinc-500">
-          Les jours cliquables ont au moins un horaire disponible. Les horaires
-          proposés tiennent compte des demandes en attente et des réservations
-          confirmées.
-        </p>
-      </aside>
+function SectionTitle({
+  eyebrow,
+  title,
+}: {
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-600 text-sm font-semibold text-white">
+        {eyebrow}
+      </span>
+      <h2 className="text-base font-semibold text-zinc-950">{title}</h2>
     </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <p className="mt-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
+      {message}
+    </p>
+  );
+}
+
+function DayButton({
+  day,
+  isSelected,
+  onSelect,
+}: {
+  day: DisplayReservationDay;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={isSelected}
+      className={`min-h-20 rounded-xl border px-4 py-3 text-left transition ${
+        isSelected
+          ? "border-amber-600 bg-amber-600 text-white"
+          : "border-zinc-200 bg-white text-zinc-800 hover:border-amber-300 hover:bg-amber-50"
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      <span className="block text-sm font-semibold capitalize">
+        {getDayLabel(day.dateKey)}
+      </span>
+      <span
+        className={`mt-1 block text-xs ${
+          isSelected ? "text-amber-50" : "text-zinc-500"
+        }`}
+      >
+        {day.times.length} horaire{day.times.length > 1 ? "s" : ""}
+      </span>
+    </button>
+  );
+}
+
+function TimeButton({
+  isSelected,
+  onSelect,
+  time,
+}: {
+  isSelected: boolean;
+  onSelect: () => void;
+  time: DisplayReservationTime;
+}) {
+  return (
+    <button
+      aria-pressed={isSelected}
+      className={`h-14 rounded-xl border px-4 text-lg font-semibold transition ${
+        isSelected
+          ? "border-amber-600 bg-amber-600 text-white"
+          : "border-zinc-200 bg-white text-zinc-900 hover:border-amber-300 hover:bg-amber-50"
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      {formatTime(time.startAt)}
+    </button>
+  );
+}
+
+function ReservationSummary({
+  durationMinutes,
+  selectedTime,
+  serviceLabel,
+}: {
+  durationMinutes: number;
+  selectedTime: DisplayReservationTime;
+  serviceLabel?: string;
+}) {
+  return (
+    <section className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+      <h2 className="text-sm font-semibold text-emerald-950">
+        Votre rendez-vous
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-emerald-900">
+        {serviceLabel ?? "Séance"} de {durationMinutes === 90 ? "1h30" : "1h"}
+        {" · "}
+        {formatDate(selectedTime.startAt)} à {formatTime(selectedTime.startAt)}
+      </p>
+    </section>
+  );
+}
+
+function ConfirmationSuccess({
+  booking,
+  durationMinutes,
+  serviceLabel,
+}: {
+  booking: BookingResponse;
+  durationMinutes: number;
+  serviceLabel?: string;
+}) {
+  return (
+    <section className="mx-auto w-full max-w-2xl rounded-2xl border border-emerald-200 bg-white/90 p-5 shadow-sm sm:p-6">
+      <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+        Email envoyé
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+        Votre demande est presque confirmée
+      </h2>
+      <p className="mt-4 text-sm leading-6 text-zinc-700">
+        Un email de confirmation vient de vous être envoyé pour votre{" "}
+        {serviceLabel?.toLocaleLowerCase("fr-FR") ?? "séance"} de{" "}
+        {durationMinutes === 90 ? "1h30" : "1h"}, le{" "}
+        {formatDate(booking.startAt)} à {formatTime(booking.startAt)}.
+      </p>
+      <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm leading-6 text-amber-950">
+        <p className="font-semibold">Dernière étape</p>
+        <p className="mt-2">
+          Cliquez sur le lien reçu par email pour confirmer définitivement le
+          rendez-vous. Pensez à vérifier vos spams. Sans cette validation par
+          email, le rendez-vous n&apos;est pas confirmé.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -500,7 +540,7 @@ function TextField({
     <label className="flex flex-col gap-2 text-sm font-medium">
       {label}
       <input
-        className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
+        className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/15"
         onChange={(event) => onChange(event.target.value)}
         required={required}
         type={type}
