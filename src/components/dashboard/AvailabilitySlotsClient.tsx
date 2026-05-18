@@ -358,26 +358,27 @@ export function AvailabilitySlotsClient({
     }
   }
 
-  async function copyWeekToNextWeek() {
+  async function copyWeekToFutureWeek(weekOffset: 1 | 2) {
+    const targetLabel = `N+${weekOffset}`;
     const confirmed = window.confirm(
-      "Copier toutes les plages visibles vers la semaine suivante ?",
+      `Copier toutes les plages visibles vers la semaine ${targetLabel} ?`,
     );
 
     if (!confirmed || visibleSlots.length === 0) {
       return;
     }
 
-    const nextWeekKeys = new Set(
-      weekDays.map((day) => dateKey(addWeeks(day, 1))),
+    const targetWeekKeys = new Set(
+      weekDays.map((day) => dateKey(addWeeks(day, weekOffset))),
     );
-    const nextWeekHasActiveSlots = slots.some(
+    const targetWeekHasActiveSlots = slots.some(
       (slot) =>
-        slot.isActive && nextWeekKeys.has(dateKey(new Date(slot.startAt))),
+        slot.isActive && targetWeekKeys.has(dateKey(new Date(slot.startAt))),
     );
 
-    if (nextWeekHasActiveSlots) {
+    if (targetWeekHasActiveSlots) {
       setErrorMessage(
-        "La semaine suivante contient déjà des disponibilités. Copie annulée pour éviter les doublons.",
+        `La semaine ${targetLabel} contient déjà des disponibilités. Copie annulée pour éviter les doublons.`,
       );
       setSuccessMessage(undefined);
 
@@ -392,9 +393,9 @@ export function AvailabilitySlotsClient({
       const createdSlots = await Promise.all(
         visibleSlots.map((slot) =>
           createSlot({
-            endAt: addWeeks(new Date(slot.endAt), 1),
+            endAt: addWeeks(new Date(slot.endAt), weekOffset),
             notes: slot.notes,
-            startAt: addWeeks(new Date(slot.startAt), 1),
+            startAt: addWeeks(new Date(slot.startAt), weekOffset),
           }),
         ),
       );
@@ -402,7 +403,7 @@ export function AvailabilitySlotsClient({
       setSuccessMessage(
         `${createdSlots.length} plage${
           createdSlots.length > 1 ? "s" : ""
-        } copiée${createdSlots.length > 1 ? "s" : ""}.`,
+        } copiée${createdSlots.length > 1 ? "s" : ""} vers la semaine ${targetLabel}.`,
       );
     } catch (error) {
       setErrorMessage(
@@ -486,10 +487,18 @@ export function AvailabilitySlotsClient({
             <button
               className="h-10 rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
               disabled={isCopyingWeek || visibleSlots.length === 0}
-              onClick={copyWeekToNextWeek}
+              onClick={() => copyWeekToFutureWeek(1)}
               type="button"
             >
-              {isCopyingWeek ? "Copie..." : "Copier vers semaine suivante"}
+              {isCopyingWeek ? "Copie..." : "Copier vers semaine N+1"}
+            </button>
+            <button
+              className="h-10 rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              disabled={isCopyingWeek || visibleSlots.length === 0}
+              onClick={() => copyWeekToFutureWeek(2)}
+              type="button"
+            >
+              {isCopyingWeek ? "Copie..." : "Copier vers semaine N+2"}
             </button>
           </div>
         </div>
