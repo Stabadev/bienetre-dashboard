@@ -34,27 +34,34 @@ model AvailabilitySlot {
 }
 
 model Booking {
-  id                 String            @id @default(cuid())
-  availabilitySlotId String?
-  availabilitySlot   AvailabilitySlot? @relation(fields: [availabilitySlotId], references: [id], onDelete: SetNull)
-  source             BookingSource     @default(INTERNAL)
-  status             BookingStatus     @default(PENDING)
-  clientFirstName    String?
-  clientLastName     String?
-  clientName         String
-  clientEmail        String
-  clientPhone        String?
-  clientMessage      String?
-  service            String?
-  startAt            DateTime
-  endAt              DateTime
-  confirmationTokenHash      String?   @unique
+  id                         String            @id @default(cuid())
+  availabilitySlotId         String?
+  availabilitySlot           AvailabilitySlot? @relation(fields: [availabilitySlotId], references: [id], onDelete: SetNull)
+  source                     BookingSource     @default(INTERNAL)
+  status                     BookingStatus     @default(PENDING)
+  clientFirstName            String?
+  clientLastName             String?
+  clientName                 String
+  clientEmail                String
+  clientPhone                String?
+  clientMessage              String?
+  service                    String?
+  startAt                    DateTime
+  endAt                      DateTime
+  externalEventUri           String?
+  externalInviteeUri         String?
+  externalEventTypeUri       String?
+  externalStatus             String?
+  externalUpdatedAt          DateTime?
+  syncedAt                   DateTime?
+  confirmationTokenHash      String?           @unique
   confirmationTokenExpiresAt DateTime?
-  confirmedAt        DateTime?
-  cancelledAt        DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  confirmedAt                DateTime?
+  cancelledAt                DateTime?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
 
+  @@unique([source, externalEventUri])
   @@index([availabilitySlotId])
   @@index([source, startAt])
   @@index([status, startAt])
